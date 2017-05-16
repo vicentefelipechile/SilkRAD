@@ -735,8 +735,8 @@ namespace BSP {
     }
 
     void BSP::init_ambient_samples(void) {
-        const float SAMPLE_SPACING_X = 256.0;
-        const float SAMPLE_SPACING_Y = 256.0;
+        const float SAMPLE_SPACING_X = 128.0;
+        const float SAMPLE_SPACING_Y = 128.0;
         const float SAMPLE_SPACING_Z = 256.0;
 
         m_ambientLightIndices.clear();

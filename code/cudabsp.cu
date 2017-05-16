@@ -80,12 +80,16 @@
 
 namespace CUDABSP {
     __device__ BSP::RGBExp32 rgbexp32_from_float3(float3 color) {
-        if ((color.x < 1.0 || color.y < 1.0 || color.z < 1.0)
-                && color.x > 1e-3 && color.y > 1e-3 && color.z > 1e-3) {
+        if ((1e-3 <= color.x && color.x < 1.0)
+                || (1e-3 <= color.y && color.y < 1.0)
+                || (1e-3 <= color.z && color.z < 1.0)) {
+
             int8_t exp = 0;
 
-            while ((color.x < 1.0 || color.y < 1.0 || color.z < 1.0)
-                    && color.x > 1e-3 && color.y > 1e-3 && color.z > 1e-3) {
+            while ((1e-3 <= color.x && color.x < 1.0)
+                   || (1e-3 <= color.y && color.y < 1.0)
+                   || (1e-3 <= color.z && color.z < 1.0)) {
+
                 color *= 2.0;
                 exp--;
             }

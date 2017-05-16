@@ -8,7 +8,8 @@
 
 
 static __device__ inline float luma_from_rgb(float3 rgb) {
-    return sqrt(dot(rgb / 255.0, make_float3(0.299, 0.587, 0.114)));
+    //return sqrt(dot(rgb / 255.0, make_float3(0.299, 0.587, 0.114)));
+    return sqrt(dot(rgb / 255.0, make_float3(1.0, 1.0, 1.0)));
 }
 
 
@@ -250,6 +251,8 @@ __global__ void map_samples_fxaa(
     /* Iterate! */
     float lumaEnd1;
     float lumaEnd2;
+    float lumaDiff1;
+    float lumaDiff2;
 
     bool reached1 = false;
     bool reached2 = false;
@@ -263,7 +266,7 @@ __global__ void map_samples_fxaa(
                     iteration1S, iteration1T
                 )
             );
-            lumaEnd1 -= lumaLocalAvg;
+            lumaDiff1 = lumaEnd1 - lumaLocalAvg;
         }
 
         if (!reached2) {
@@ -273,12 +276,12 @@ __global__ void map_samples_fxaa(
                     iteration2S, iteration2T
                 )
             );
-            lumaEnd2 -= lumaLocalAvg;
+            lumaDiff2 = lumaEnd2 - lumaLocalAvg;
         }
 
         /* Did we reach the end of the edge? */
-        reached1 = (fabsf(lumaEnd1) >= gradientNorm);
-        reached2 = (fabsf(lumaEnd2) >= gradientNorm);
+        reached1 = lumaDiff1 < 0.0 && (fabsf(lumaDiff1) >= gradientNorm);
+        reached2 = lumaDiff2 < 0.0 && (fabsf(lumaDiff2) >= gradientNorm);
 
         /* If we've reached the end, stop iteration. */
         if (reached1 && reached2) {
@@ -422,69 +425,6 @@ __global__ void map_samples_fxaa(
 }
 
 
-__global__ void map_samples_edgeblur(
-        CUDABSP::CUDABSP* pCudaBSP,
-        float3* samplesIn,
-        /* output */ float3* samplesOut,
-        size_t width, size_t height
-        ) {
-
-    size_t s = blockIdx.x * blockDim.x + threadIdx.x;
-    size_t t = blockIdx.y * blockDim.y + threadIdx.y;
-
-    if (s >= width || t >= height) {
-        return;
-    }
-
-    float3 sample = samplesIn[t * width + s];
-
-    float lumaCenter = luma_from_rgb(sample);
-
-    /* Grab the lumas of our four direct neighbors. */
-    float lumaUp = luma_from_rgb(
-        samplesIn[((t > 0) ? (t - 1) : t) * width + s]
-    );
-    float lumaDown = luma_from_rgb(
-        samplesIn[((t < height - 1) ? (t + 1) : t) * width + s]
-    );
-    float lumaLeft = luma_from_rgb(
-        samplesIn[t * width + ((s > 0) ? (s - 1) : s)]
-    );
-    float lumaRight = luma_from_rgb(
-        samplesIn[t * width + ((s < width - 1) ? (s + 1) : s)]
-    );
-
-    /* Determine the color contrast between ourselves and our neighbors. */
-    float lumaMin = fminf(
-        lumaCenter,
-        fminf(
-            fminf(lumaUp, lumaDown),
-            fminf(lumaLeft, lumaRight)
-        )
-    );
-
-    float lumaMax = fmaxf(
-        lumaCenter,
-        fmaxf(
-            fmaxf(lumaUp, lumaDown),
-            fmaxf(lumaLeft, lumaRight)
-        )
-    );
-
-    float lumaRange = lumaMax - lumaMin;
-
-    /*
-    * Luma contrast too low (or this is a really dark spot).
-    * Don't perform AA.
-    */
-    if (lumaRange < fmaxf(EDGE_THRESHOLD_MIN, lumaMax * EDGE_THRESHOLD)) {
-        samplesOut[t * width + s] = sample;
-        return;
-    }
-
-}
-
-
 __global__ void map_faces(CUDABSP::CUDABSP* pCudaBSP) {
     size_t faceIndex = blockIdx.x * blockDim.x + threadIdx.x;
 
@@ -492,15 +432,20 @@ __global__ void map_faces(CUDABSP::CUDABSP* pCudaBSP) {
         return;
     }
 
-    BSP::DFace& face = pCudaBSP->faces[faceIndex];
+    CUDARAD::FaceInfo faceInfo(*pCudaBSP, faceIndex);
 
-    size_t width = face.lightmapTextureSizeInLuxels[0] + 1;
-    size_t height = face.lightmapTextureSizeInLuxels[1] + 1;
+    size_t width = faceInfo.lightmapWidth;
+    size_t height = faceInfo.lightmapHeight;
+    size_t numSamples = faceInfo.lightmapSize;
 
-    size_t startIndex = face.lightOffset / sizeof(BSP::RGBExp32);
+    size_t startIndex = faceInfo.lightmapStartIndex;
 
-    float3* lightSamples = pCudaBSP->lightSamples + startIndex;
-    float3* results = new float3[width * height];
+    float3* lightSamples = &pCudaBSP->lightSamples[startIndex];
+    
+    float3* results;
+    CUDA_CHECK_ERROR_DEVICE(
+        cudaMalloc(&results, sizeof(float3) * numSamples)
+    );
 
     const size_t BLOCK_WIDTH = 16;
     const size_t BLOCK_HEIGHT = 16;
@@ -522,85 +467,32 @@ __global__ void map_faces(CUDABSP::CUDABSP* pCudaBSP) {
     CUDA_CHECK_ERROR_DEVICE(cudaDeviceSynchronize());
 
     /* Transfer the AA'd results back into the light sample buffer. */
-    memcpy(lightSamples, results, sizeof(float3) * width * height);
+    memcpy(lightSamples, results, sizeof(float3) * numSamples);
 
-    delete[] results;
+    CUDA_CHECK_ERROR_DEVICE(cudaFree(results));
 }
 
 
 namespace CUDAFXAA {
-    void antialias_lightsamples(BSP::BSP& bsp, CUDABSP::CUDABSP* pCudaBSP) {
-        CUDABSP::CUDABSP cudaBSP;
+    void antialias_lightsamples(CUDABSP::CUDABSP* pCudaBSP) {
+        size_t numFaces;
 
         CUDA_CHECK_ERROR(
             cudaMemcpy(
-                &cudaBSP, pCudaBSP, sizeof(CUDABSP::CUDABSP),
+                &numFaces, &pCudaBSP->numFaces, sizeof(size_t),
                 cudaMemcpyDeviceToHost
             )
         );
 
-        for (const BSP::Face& face : bsp.get_faces()) {
-            size_t width = face.get_lightmap_width();
-            size_t height = face.get_lightmap_height();
-            size_t numSamples = width * height;
+        const size_t BLOCK_WIDTH = 1;
+        size_t numBlocks = div_ceil(numFaces, BLOCK_WIDTH);
 
-            size_t startIndex
-                = face.get_data().lightOffset / sizeof(BSP::RGBExp32);
+        KERNEL_LAUNCH(
+            map_faces,
+            numBlocks, BLOCK_WIDTH,
+            pCudaBSP
+        );
 
-            float3* samples = cudaBSP.lightSamples + startIndex;
-            float3* results;
-
-            CUDA_CHECK_ERROR(
-                cudaMalloc(&results, sizeof(float3) * numSamples)
-            );
-
-            const size_t BLOCK_WIDTH = 16;
-            const size_t BLOCK_HEIGHT = 16;
-
-            dim3 gridDim(
-                div_ceil(width, BLOCK_WIDTH),
-                div_ceil(height, BLOCK_HEIGHT)
-            );
-
-            dim3 blockDim(BLOCK_WIDTH, BLOCK_HEIGHT);
-
-            KERNEL_LAUNCH(
-                map_samples_fxaa,
-                gridDim, blockDim,
-                samples, results,
-                width, height
-            );
-
-            CUDA_CHECK_ERROR(cudaDeviceSynchronize());
-
-            CUDA_CHECK_ERROR(
-                cudaMemcpy(
-                    samples, results, sizeof(float3) * numSamples,
-                    cudaMemcpyDeviceToDevice
-                )
-            );
-
-            CUDA_CHECK_ERROR(cudaFree(results));
-        }
-
-        //size_t numFaces;
-
-        //CUDA_CHECK_ERROR(
-        //    cudaMemcpy(
-        //        &numFaces, &pCudaBSP->numFaces, sizeof(size_t),
-        //        cudaMemcpyDeviceToHost
-        //    )
-        //);
-
-        //const size_t BLOCK_WIDTH = 32;
-        //size_t numBlocks = div_ceil(numFaces, BLOCK_WIDTH);
-
-        //KERNEL_LAUNCH(
-        //    map_faces,
-        //    numBlocks, BLOCK_WIDTH,
-        //    pCudaBSP
-        //);
-
-        //CUDA_CHECK_ERROR(cudaDeviceSynchronize());
+        CUDA_CHECK_ERROR(cudaDeviceSynchronize());
     }
 }

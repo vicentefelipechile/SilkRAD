@@ -888,7 +888,7 @@ namespace CUDARAD {
 
         g_pRayTracer = std::unique_ptr<RayTracer::CUDARayTracer>(
             new RayTracer::CUDARayTracer()
-            );
+        );
 
         std::vector<RayTracer::Triangle> triangles;
 
@@ -929,7 +929,7 @@ namespace CUDARAD {
         std::chrono::milliseconds ms
             = std::chrono::duration_cast<std::chrono::milliseconds>(
                 end - start
-                );
+            );
 
         std::cout << "Done! (" << ms.count() << "ms)" << std::endl;
 
@@ -1032,7 +1032,7 @@ namespace CUDARAD {
             facesCompleted = *pFacesCompleted;
 
             if (facesCompleted > lastFacesCompleted) {
-                std::cout << facesCompleted << "/"
+                std::cout << "    " << facesCompleted << "/"
                     << numFaces
                     << " faces processed..." << std::endl;
             }
@@ -1626,18 +1626,23 @@ namespace CUDARAD {
     }
     */
 
-    void compute_ambient_lighting(BSP::BSP& bsp, CUDABSP::CUDABSP* pCudaBSP) {
+    void compute_ambient_lighting(CUDABSP::CUDABSP* pCudaBSP) {
         const size_t BLOCK_WIDTH = 32;
+        
+        size_t numLeaves;
 
-        size_t numLeaves = bsp.get_leaves().size();
-        std::cout << "Begin computations" << std::endl;
-
+        CUDA_CHECK_ERROR(
+            cudaMemcpy(
+                &numLeaves, &pCudaBSP->numLeaves, sizeof(size_t),
+                cudaMemcpyDeviceToHost
+            )
+        );
+        
         KERNEL_LAUNCH(
             AmbientLighting::map_leaves,
             numLeaves, BLOCK_WIDTH,
             pCudaBSP
         );
-        std::cout << "Complete mapping" << std::endl;
 
         CUDA_CHECK_ERROR(cudaDeviceSynchronize());
     }

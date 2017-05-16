@@ -66,7 +66,7 @@ namespace CUDARAD {
     static __device__ inline float distance(float3 p1, float3 p2);
     static __device__ inline float3 element_wise_mult(float3 f1, float3 f2);
 
-    void compute_ambient_lighting(BSP::BSP& bsp, CUDABSP::CUDABSP* pCudaBSP);
+    void compute_ambient_lighting(CUDABSP::CUDABSP* pCudaBSP);
 }
 
 #endif

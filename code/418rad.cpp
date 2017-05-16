@@ -64,10 +64,10 @@ int main(int argc, char** argv) {
     }
 
     /*
-    * HACK!
-    * Disable normal maps throughout the entire BSP, because I didn't 
-    * implement them and we don't have time.
-    */
+     * HACK!
+     * Disable normal maps throughout the entire BSP, because I didn't 
+     * implement them and we don't have time.
+     */
     for (const BSP::TexInfo& texInfo : pBSP->get_texinfos()) {
         BSP::TexInfo& ti = const_cast<BSP::TexInfo&>(texInfo);
         ti.flags &= ~BSP::SURF_BUMPLIGHT;
@@ -91,17 +91,25 @@ int main(int argc, char** argv) {
     std::cout << "Compute direct lighting..." << std::endl;
     CUDARAD::compute_direct_lighting(*pBSP, pCudaBSP);
 
-    std::cout << "Run direct lighting antialiasing pass..." << std::endl;
-    CUDARAD::antialias_direct_lighting(*pBSP, pCudaBSP);
+    //std::cout << "Run direct lighting antialiasing pass..." << std::endl;
+    //CUDARAD::antialias_direct_lighting(*pBSP, pCudaBSP);
 
-    std::cout << "Compute light bounces..." << std::endl;
-    CUDARAD::bounce_lighting(*pBSP, pCudaBSP);
+    //std::cout << "Compute light bounces..." << std::endl;
+    //CUDARAD::bounce_lighting(*pBSP, pCudaBSP);
 
     std::cout << "Compute ambient lighting..." << std::endl;
-    CUDARAD::compute_ambient_lighting(*pBSP, pCudaBSP);
+    CUDARAD::compute_ambient_lighting(pCudaBSP);
 
-    //std::cout << "Run light sample FXAA pass..." << std::endl;
-    //CUDAFXAA::antialias_lightsamples(*pBSP, pCudaBSP);
+    std::cout << "Run lightmap FXAA passes..." << std::endl;
+    const size_t NUM_FXAA_PASSES = 5;
+    for (size_t i=0; i<NUM_FXAA_PASSES; i++) {
+        std::cout << "    Pass "
+            << i + 1 << "/" << NUM_FXAA_PASSES << "..."
+            << std::endl;
+
+        CUDAFXAA::antialias_lightsamples(pCudaBSP);
+    }
+    std::cout << "Done!" << std::endl;
 
     std::cout << "Convert light samples to RGBExp32..." << std::endl;
     CUDABSP::convert_lightsamples(pCudaBSP);

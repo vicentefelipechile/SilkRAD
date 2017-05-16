@@ -5,7 +5,7 @@
 #include "cudabsp.h"
 
 namespace CUDAFXAA {
-    void antialias_lightsamples(BSP::BSP& bsp, CUDABSP::CUDABSP* pCudaBSP);
+    void antialias_lightsamples(CUDABSP::CUDABSP* pCudaBSP);
 }
 
 #endif
