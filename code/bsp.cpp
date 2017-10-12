@@ -719,7 +719,7 @@ namespace BSP {
     }
     
     const std::unordered_map<int, std::vector<uint8_t>>&
-    BSP::get_extras(void) const{
+    BSP::get_extras(void) const {
         return m_extraLumps;
     }
 

@@ -52,6 +52,30 @@ namespace RayTracer {
         return (0.0 < t && t < dist);
     }
 
+    /**
+     * Widens a triangle by a small margin, to better deal with ray-tracing
+     * edge cases.
+     */
+    __global__ void map_widen_tris(Triangle* triangles, size_t numTris) {
+        size_t index = blockIdx.x * blockDim.x + threadIdx.x;
+
+        if (index >= numTris) {
+            return;
+        }
+
+        Triangle& tri = triangles[index];
+
+        const float EPSILON = 1e-3;
+
+        float3& vertex1 = tri.vertices[0];
+        float3& vertex2 = tri.vertices[1];
+        float3& vertex3 = tri.vertices[2];
+
+        vertex1 += normalized(vertex1 - 0.5 * (vertex2 + vertex3)) * EPSILON;
+        vertex2 += normalized(vertex2 - 0.5 * (vertex1 + vertex3)) * EPSILON;
+        vertex3 += normalized(vertex3 - 0.5 * (vertex1 + vertex2)) * EPSILON;
+    }
+
     static const size_t MAX_DEPTH = 10;
 
     __global__ void split_nodes(
@@ -287,25 +311,12 @@ namespace RayTracer {
             )
         );
 
-        Triangle* deviceTriangles;
-        size_t deviceTrianglesSize = sizeof(Triangle) * m_numTriangles;
-
-        CUDA_CHECK_ERROR(cudaMalloc(&deviceTriangles, deviceTrianglesSize));
-        CUDA_CHECK_ERROR(
-            cudaMemcpy(
-                deviceTriangles, m_triangles, deviceTrianglesSize,
-                cudaMemcpyHostToDevice
-            )
-        );
-
         KERNEL_LAUNCH(
             split_nodes, 1, 1,
-            deviceTriangles, m_pTreeRoot, MAX_DEPTH
+            m_triangles, m_pTreeRoot, MAX_DEPTH
         );
 
         CUDA_CHECK_ERROR(cudaDeviceSynchronize());
-
-        CUDA_CHECK_ERROR(cudaFree(deviceTriangles));
     }
 
     __host__ void CUDARayTracer::destroy_tree(void) {
@@ -352,6 +363,21 @@ namespace RayTracer {
                 cudaMemcpyHostToDevice
             )
         );
+
+        /*
+         * Widen each triangle by a small margin, to better deal with ray-
+         * tracing edge cases.
+         */
+        const size_t BLOCK_WIDTH = 1024;
+        size_t numBlocks = div_ceil(m_numTriangles, BLOCK_WIDTH);
+
+        KERNEL_LAUNCH(
+            map_widen_tris,
+            numBlocks, BLOCK_WIDTH,
+            m_triangles, m_numTriangles
+        );
+
+        CUDA_CHECK_ERROR(cudaDeviceSynchronize());
 
         std::vector<size_t> triangleIDs;
         for (size_t i=0; i<m_numTriangles; i++) {
@@ -519,6 +545,11 @@ namespace RayTracer {
                             start,
                             clipPoint,
                         };
+                        
+                        if (stackSize >= 1024) {
+                            printf("ALERT: Stack size too big!!!\n");
+                            return false;
+                        }
 
                         stack[stackSize++] = {
                             &children[dirPositive ? 1 : 0],

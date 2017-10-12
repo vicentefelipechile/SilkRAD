@@ -18,33 +18,41 @@ static __device__ inline float clamp(float x, float lower, float upper) {
 }
 
 
+static __device__ float3 sample(
+        CUDABSP::CUDABSP& cudaBSP, CUDARAD::FaceInfo& faceInfo,
+        float3* samplesIn, size_t width, size_t height,
+        float s, float t
+        ) {
+
+    if (0.0 <= s && s < width) {
+        if (0.0 <= t && t < height) {
+            return samplesIn[static_cast<size_t>(t * width + s)];
+        }
+    }
+
+    // If we're not in bounds, we have no choice but to take another light 
+    // sample.
+    return DirectLighting::sample_at(cudaBSP, faceInfo, s, t);
+}
+
+
 static __device__ float3 subsample(
-        float3* samples, size_t width, size_t height,
+        CUDABSP::CUDABSP& cudaBSP, CUDARAD::FaceInfo& faceInfo,
+        float3* samplesIn, size_t width, size_t height,
         float s, float t
         ) {
 
     //float3 zero = make_float3(0.0, 0.0, 0.0);
 
+    const float EPSILON = 1e-3;
+
+    s = fminf(fmaxf(0.0, s), width - EPSILON);
+    t = fminf(fmaxf(0.0, t), height - EPSILON);
+
     int s0 = static_cast<int>(floorf(s));
     int t0 = static_cast<int>(floorf(t));
     int s1 = s0 + 1;
     int t1 = t0 + 1;
-
-    if (s0 < 0) {
-        s0 = 0;
-    }
-
-    if (t0 < 0) {
-        t0 = 0;
-    }
-
-    if (s1 >= width) {
-        s1 = width - 1;
-    }
-
-    if (t1 >= height) {
-        t1 = height - 1;
-    }
 
     float rWeight = s - floorf(s);
     float lWeight = 1.0 - rWeight;
@@ -52,10 +60,14 @@ static __device__ float3 subsample(
     float dWeight = t - floorf(t);
     float uWeight = 1.0 - dWeight;
 
-    float3 sampleUL = samples[t0 * width + s0];
-    float3 sampleUR = samples[t0 * width + s1];
-    float3 sampleDL = samples[t1 * width + s0];
-    float3 sampleDR = samples[t1 * width + s1];
+    auto get_sample = [&] (float s, float t) -> float3 {
+        return sample(cudaBSP, faceInfo, samplesIn, width, height, s, t);
+    };
+
+    float3 sampleUL = get_sample(s0, t0);
+    float3 sampleUR = get_sample(s1, t0);
+    float3 sampleDL = get_sample(s0, t1);
+    float3 sampleDR = get_sample(s1, t1);
 
     float3 sampleU = lWeight * sampleUL + rWeight * sampleUR;
     float3 sampleD = lWeight * sampleDL + rWeight * sampleDR;
@@ -77,35 +89,35 @@ static __device__ const float SUBPIXEL_QUALITY = 0.75;
  *  http://developer.download.nvidia.com/assets/gamedev/files/sdk/11/FXAA_WhitePaper.pdf
  */
 __global__ void map_samples_fxaa(
-        float3* samplesIn,
-        /* output */ float3* samplesOut,
+        CUDABSP::CUDABSP* pCudaBSP, CUDARAD::FaceInfo* pFaceInfo,
+        float3* samplesIn, /* output */ float3* samplesOut,
         size_t width, size_t height
         ) {
 
-    size_t s = blockIdx.x * blockDim.x + threadIdx.x;
-    size_t t = blockIdx.y * blockDim.y + threadIdx.y;
+    float s = static_cast<float>(blockIdx.x * blockDim.x + threadIdx.x);
+    float t = static_cast<float>(blockIdx.y * blockDim.y + threadIdx.y);
 
     if (s >= width || t >= height) {
         return;
     }
 
-    float3 sample = samplesIn[t * width + s];
+    auto get_sample = [&] (float s, float t) -> float3 {
+        return sample(*pCudaBSP, *pFaceInfo, samplesIn, width, height, s, t);
+    };
 
-    float lumaCenter = luma_from_rgb(sample);
+    auto get_subsample = [&] (float s, float t) -> float3 {
+        return subsample(*pCudaBSP, *pFaceInfo, samplesIn, width, height, s, t);
+    };
+
+    float3 rgbSample = get_sample(s, t);
+
+    float lumaCenter = luma_from_rgb(rgbSample);
 
     /* Grab the lumas of our four direct neighbors. */
-    float lumaUp = luma_from_rgb(
-        samplesIn[((t > 0) ? (t - 1) : t) * width + s]
-    );
-    float lumaDown = luma_from_rgb(
-        samplesIn[((t < height - 1) ? (t + 1) : t) * width + s]
-    );
-    float lumaLeft = luma_from_rgb(
-        samplesIn[t * width + ((s > 0) ? (s - 1) : s)]
-    );
-    float lumaRight = luma_from_rgb(
-        samplesIn[t * width + ((s < width - 1) ? (s + 1) : s)]
-    );
+    float lumaUp = luma_from_rgb(get_sample(s, t - 1));
+    float lumaDown = luma_from_rgb(get_sample(s, t + 1));
+    float lumaLeft = luma_from_rgb(get_sample(s - 1, t));
+    float lumaRight = luma_from_rgb(get_sample(s + 1, t));
 
     /* Determine the color contrast between ourselves and our neighbors. */
     float lumaMin = fminf(
@@ -131,7 +143,7 @@ __global__ void map_samples_fxaa(
      * Don't perform AA.
      */
     if (lumaRange < fmaxf(EDGE_THRESHOLD_MIN, lumaMax * EDGE_THRESHOLD)) {
-        samplesOut[t * width + s] = sample;
+        samplesOut[static_cast<size_t>(t * width + s)] = rgbSample;
         return;
     }
     //else {
@@ -140,29 +152,10 @@ __global__ void map_samples_fxaa(
     //}
 
     /* Grab the lumas of our remaining corner neighbors. */
-    float lumaUL = luma_from_rgb(
-        (t > 0 && s > 0) ?
-        samplesIn[(t - 1) * width + s - 1] :
-        samplesIn[t * width + s]
-    );
-
-    float lumaUR = luma_from_rgb(
-        (t > 0 && s < width - 1) ?
-        samplesIn[(t - 1) * width + s + 1] :
-        samplesIn[t * width + s]
-    );
-
-    float lumaDL = luma_from_rgb(
-        (t < height - 1 && s > 0) ?
-        samplesIn[(t + 1) * width + s - 1] :
-        samplesIn[t * width + s]
-    );
-
-    float lumaDR = luma_from_rgb(
-        (t < height - 1 && s < width - 1) ?
-        samplesIn[(t + 1) * width + s + 1] :
-        samplesIn[t * width + s]
-    );
+    float lumaUL = luma_from_rgb(get_sample(s - 1, t - 1));
+    float lumaUR = luma_from_rgb(get_sample(s + 1, t - 1));
+    float lumaDL = luma_from_rgb(get_sample(s - 1, t + 1));
+    float lumaDR = luma_from_rgb(get_sample(s + 1, t + 1));
 
     /* Combine the edge lumas. */
     float lumaUD = lumaUp + lumaDown;
@@ -260,22 +253,12 @@ __global__ void map_samples_fxaa(
     for (size_t i=0; i<MAX_ITERATIONS; i++) {
         /* Sample lumas in both directions along the edge. */
         if (!reached1) {
-            lumaEnd1 = luma_from_rgb(
-                subsample(
-                    samplesIn, width, height,
-                    iteration1S, iteration1T
-                )
-            );
+            lumaEnd1 = luma_from_rgb(get_subsample(iteration1S, iteration1T));
             lumaDiff1 = lumaEnd1 - lumaLocalAvg;
         }
 
         if (!reached2) {
-            lumaEnd2 = luma_from_rgb(
-                subsample(
-                    samplesIn, width, height,
-                    iteration2S, iteration2T
-                )
-            );
+            lumaEnd2 = luma_from_rgb(get_subsample(iteration2S, iteration2T));
             lumaDiff2 = lumaEnd2 - lumaLocalAvg;
         }
 
@@ -333,28 +316,29 @@ __global__ void map_samples_fxaa(
     //    pixelOffset
     //);
 
-    /*
-     * Subpixel antialiasing
-     */
+    ///*
+    // * Subpixel antialiasing
+    // */
 
-    /* Weighted average of all the lumas in our local 3x3 grid. */
-    float lumaAvg = (
-        (1.0 / 12.0) * (2.0 * (lumaUD + lumaLR) + lumaULDL + lumaURDR)
-    );
+    ///* Weighted average of all the lumas in our local 3x3 grid. */
+    //float lumaAvg = (
+    //    (1.0 / 12.0) * (2.0 * (lumaUD + lumaLR) + lumaULDL + lumaURDR)
+    //);
 
-    float subpixelOffset1 = clamp(
-        fabsf(lumaAvg - lumaCenter) / lumaRange,
-        0.0, 1.0
-    );
-    float subpixelOffset2 = (
-        (-2.0 * subpixelOffset1 + 3.0) * subpixelOffset1 * subpixelOffset1
-    );
+    //float subpixelOffset1 = clamp(
+    //    fabsf(lumaAvg - lumaCenter) / lumaRange,
+    //    0.0, 1.0
+    //);
+    //float subpixelOffset2 = (
+    //    (-2.0 * subpixelOffset1 + 3.0) * subpixelOffset1 * subpixelOffset1
+    //);
 
-    float subpixelOffset = (
-        subpixelOffset2 * subpixelOffset2 * SUBPIXEL_QUALITY
-    );
+    //float subpixelOffset = (
+    //    subpixelOffset2 * subpixelOffset2 * SUBPIXEL_QUALITY
+    //);
 
-    float finalOffset = fmaxf(subpixelOffset, pixelOffset);
+    //float finalOffset = fmaxf(subpixelOffset, pixelOffset);
+    float finalOffset = pixelOffset;
 
     if (grad1Steeper) {
         finalOffset = -finalOffset;
@@ -372,7 +356,7 @@ __global__ void map_samples_fxaa(
     }
 
     /* Final subsample... */
-    float3 color = subsample(samplesIn, width, height, finalS, finalT);
+    float3 color = get_subsample(finalS, finalT);
 
     //{
     //    int s0 = static_cast<int>(floorf(s));
@@ -421,18 +405,24 @@ __global__ void map_samples_fxaa(
     //    make_float3(color.x, color.y * 10.0, color.z);
 
     /* ... and we're done! */
-    samplesOut[t * width + s] = color;
+    samplesOut[static_cast<size_t>(t * width + s)] = color;
 }
 
 
-__global__ void map_faces(CUDABSP::CUDABSP* pCudaBSP) {
+__global__ void map_faces(
+        CUDABSP::CUDABSP* pCudaBSP,
+        CUDARAD::FaceInfo* faceInfos
+        ) {
+
     size_t faceIndex = blockIdx.x * blockDim.x + threadIdx.x;
 
     if (faceIndex >= pCudaBSP->numFaces) {
         return;
     }
 
-    CUDARAD::FaceInfo faceInfo(*pCudaBSP, faceIndex);
+    faceInfos[faceIndex] = CUDARAD::FaceInfo(*pCudaBSP, faceIndex);
+
+    CUDARAD::FaceInfo& faceInfo = faceInfos[faceIndex];
 
     size_t width = faceInfo.lightmapWidth;
     size_t height = faceInfo.lightmapHeight;
@@ -441,7 +431,7 @@ __global__ void map_faces(CUDABSP::CUDABSP* pCudaBSP) {
     size_t startIndex = faceInfo.lightmapStartIndex;
 
     float3* lightSamples = &pCudaBSP->lightSamples[startIndex];
-    
+
     float3* results;
     CUDA_CHECK_ERROR_DEVICE(
         cudaMalloc(&results, sizeof(float3) * numSamples)
@@ -460,6 +450,7 @@ __global__ void map_faces(CUDABSP::CUDABSP* pCudaBSP) {
     KERNEL_LAUNCH_DEVICE(
         map_samples_fxaa,
         gridDim, blockDim,
+        pCudaBSP, &faceInfo,
         lightSamples, results,
         width, height
     );
@@ -469,6 +460,7 @@ __global__ void map_faces(CUDABSP::CUDABSP* pCudaBSP) {
     /* Transfer the AA'd results back into the light sample buffer. */
     memcpy(lightSamples, results, sizeof(float3) * numSamples);
 
+    //CUDA_CHECK_ERROR_DEVICE(cudaFree(faceInfoBuffer));
     CUDA_CHECK_ERROR_DEVICE(cudaFree(results));
 }
 
@@ -483,6 +475,15 @@ namespace CUDAFXAA {
                 cudaMemcpyDeviceToHost
             )
         );
+        
+        /*
+         * Allocate an array of FaceInfo structures, which will be needed for
+         * each round of FXAA.
+         */
+        CUDARAD::FaceInfo* faceInfos;
+        CUDA_CHECK_ERROR(
+            cudaMalloc(&faceInfos, sizeof(CUDARAD::FaceInfo) * numFaces)
+        );
 
         const size_t BLOCK_WIDTH = 1;
         size_t numBlocks = div_ceil(numFaces, BLOCK_WIDTH);
@@ -490,9 +491,11 @@ namespace CUDAFXAA {
         KERNEL_LAUNCH(
             map_faces,
             numBlocks, BLOCK_WIDTH,
-            pCudaBSP
+            pCudaBSP, faceInfos
         );
 
         CUDA_CHECK_ERROR(cudaDeviceSynchronize());
+
+        CUDA_CHECK_ERROR(cudaFree(faceInfos));
     }
 }

@@ -27,18 +27,6 @@ namespace CUDARAD {
 
         __device__ float3 xyz_from_st(float s, float t);
     };
-
-    struct PatchInfo{
-      FaceInfo face_info;
-      float3 totalLight;
-      float3 brightness;
-      float3 receivedLight;
-      float3 reflectivity;
-      float s;
-      float t;
-      bool skip;
-    //  float3* vertices;
-    };
 }
 
 namespace DirectLighting {
@@ -56,16 +44,7 @@ namespace CUDARAD {
     void antialias_direct_lighting(BSP::BSP& bsp, CUDABSP::CUDABSP* pCudaBSP);
 
     void bounce_lighting(BSP::BSP& bsp, CUDABSP::CUDABSP* pCudaBSP);
-    void bounce_lighting_fly(BSP::BSP& bsp, CUDABSP::CUDABSP* pCudaBSP);
-    __global__ void bounce_iteration(CUDABSP::CUDABSP* pCudaBSP, PatchInfo* patches, int totalNumPatches);
-    void generate_face_info(CUDABSP::CUDABSP* pCudaBSP, CUDARAD::FaceInfo& faces);
-    void generate_patch_info(CUDABSP::CUDABSP* pCudaBSP, CUDARAD::FaceInfo* faces,
-                             size_t num_faces, CUDARAD::PatchInfo& patches);
-
-    float3 center(PatchInfo patch);
-    static __device__ inline float distance(float3 p1, float3 p2);
-    static __device__ inline float3 element_wise_mult(float3 f1, float3 f2);
-
+    
     void compute_ambient_lighting(CUDABSP::CUDABSP* pCudaBSP);
 }
 

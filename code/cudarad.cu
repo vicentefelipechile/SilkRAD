@@ -319,7 +319,8 @@ namespace AA {
         );
     }
 
-    static __device__ const float MIN_AA_GRADIENT = 0.0625;    // 1/16
+    static __device__ const float MIN_AA_GRADIENT = 0.125;      // 1/8
+    //static __device__ const float MIN_AA_GRADIENT = 0.0625;    // 1/16
 
     __global__ void map_face_samples(
             CUDABSP::CUDABSP* pCudaBSP,
@@ -676,51 +677,13 @@ namespace BouncedLighting {
      * ... and Formula 4.16 of this one:
      * https://books.google.com/books?id=zALK286TFXgC&lpg=PP1&pg=PA72#v=onepage&q&f=false
      */
-    static __device__ float ff_diff_poly( // Assumes perfect squares
+    static __device__ float ff_diff_poly(
             float3 diffPos, float3 diffNorm,
-            CUDARAD::PatchInfo patch, size_t numVertices
+            float3* vertices, size_t numVertices
             ) {
 
         float result = 0.0;
-        float3 v1, v2, v3, v4, vx1, vx2, vx3, vx4;
-        v1 = patch.face_info.xyz_from_st(patch.s-0.5, patch.t-0.5) - diffPos;
-        v2 = patch.face_info.xyz_from_st(patch.s-0.5, patch.t+0.5) - diffPos;
-        v3 = patch.face_info.xyz_from_st(patch.s+0.5, patch.t+0.5) - diffPos;
-        v4 = patch.face_info.xyz_from_st(patch.s+0.5, patch.t-0.5) - diffPos;
 
-        vx1 = cross(v1, v2);
-        vx2 = cross(v2, v3);
-        vx3 = cross(v3, v4);
-        vx4 = cross(v4, v1);
-
-        float xlen1 = len(vx1);
-        float xlen2 = len(vx2);
-        float xlen3 = len(vx3);
-        float xlen4 = len(vx4);
-
-        vx1 /= xlen1;
-        vx2 /= xlen2;
-        vx3 /= xlen3;
-        vx4 /= xlen4;
-
-        float vlen1 = len(v1);
-        float vlen2 = len(v2);
-        float vlen3 = len(v3);
-        float vlen4 = len(v4);
-
-        float t1 = asinf(xlen1 / (vlen1 * vlen2));
-        float t2 = asinf(xlen2 / (vlen2 * vlen3));
-        float t3 = asinf(xlen3 / (vlen3 * vlen4));
-        float t4 = asinf(xlen4 / (vlen4 * vlen1));
-
-        result += dot(diffNorm, vx1) * t1;
-        result += dot(diffNorm, vx2) * t2;
-        result += dot(diffNorm, vx3) * t3;
-        result += dot(diffNorm, vx4) * t4;
-
-
-
-/*
         for (size_t i=0; i<4; i++) {
             float3 vertex1 = vertices[i] - diffPos;
             float3 vertex2 = vertices[(i + 1) % numVertices] - diffPos;
@@ -736,13 +699,11 @@ namespace BouncedLighting {
 
             result += dot(diffNorm, vertexCross) * theta;
         }
-        */
 
         result *= 0.5 * INV_PI;
 
         return result;
     }
-
 
 
     /** Computes the form factor between two differential patches. */
@@ -894,8 +855,10 @@ namespace CUDARAD {
 
         /* Put all of the BSP's face triangles into the ray-tracer. */
         for (const BSP::Face& face : bsp.get_faces()) {
-            if (face.get_texinfo().flags & BSP::SURF_TRANS) {
-                // Skip translucent faces.
+            int32_t flags = face.get_texinfo().flags;
+
+            if ((flags & BSP::SURF_TRANS) && !(flags & BSP::SURF_NODRAW)) {
+                // Skip translucent faces, but keep nodraw faces.
                 continue;
             }
 
@@ -931,7 +894,7 @@ namespace CUDARAD {
                 end - start
             );
 
-        std::cout << "Done! (" << ms.count() << "ms)" << std::endl;
+        std::cout << "Done! (" << ms.count() << " ms)" << std::endl;
 
         std::cout << "Moving ray-tracer to device..." << std::endl;
 
@@ -1012,13 +975,11 @@ namespace CUDARAD {
 
         CUDA_CHECK_ERROR(cudaEventRecord(startEvent));
 
-        KERNEL_LAUNCH_DEVICE(
+        KERNEL_LAUNCH(
             DirectLighting::map_faces,
             numFaces, blockDim,
             pCudaBSP, const_cast<size_t*>(pDeviceFacesCompleted)
         );
-
-        CUDA_CHECK_ERROR(cudaPeekAtLastError());
 
         flush_wddm_queue();
 
@@ -1049,7 +1010,7 @@ namespace CUDARAD {
         float time;
         CUDA_CHECK_ERROR(cudaEventElapsedTime(&time, startEvent, stopEvent));
 
-        std::cout << "Done! (" << time << "ms)" << std::endl;
+        std::cout << "Done! (" << time << " ms)" << std::endl;
 
         cudaFreeHost(const_cast<size_t*>(pFacesCompleted));
     }
@@ -1157,7 +1118,7 @@ namespace CUDARAD {
             cudaMalloc(&finalFacesForCoords, sizeof(int) * numTargets)
         );
 
-        blockWidth = 128;
+        blockWidth = 32;
         numBlocks = div_ceil(numSamples, blockWidth);
 
         KERNEL_LAUNCH(
@@ -1210,423 +1171,28 @@ namespace CUDARAD {
         float time;
         CUDA_CHECK_ERROR(cudaEventElapsedTime(&time, startEvent, stopEvent));
 
-        std::cout << "Done! (" << time << "ms)" << std::endl;
+        std::cout << "Done! (" << time << " ms)" << std::endl;
     }
-
-    __global__ void generate_face_info(CUDABSP::CUDABSP* pCudaBSP, CUDARAD::FaceInfo* const faces)
-    {
-      //int face_index = threadIdx.x + threadIdx.y * blockIdx.x;
-      int face_index = blockIdx.x * blockDim.x + threadIdx.x;
-      if(face_index+1 > pCudaBSP->numFaces)
-        return;
-
-      bool primaryThread = (threadIdx.x == 0 && threadIdx.y == 0);
-
-      if (pCudaBSP->tag != CUDABSP::TAG) {
-        if (primaryThread) {
-          printf("Invalid CUDABSP Tag: %x\n", pCudaBSP->tag);
-        }
-        return;
-      }
-
-      faces[face_index] = FaceInfo(*pCudaBSP, face_index);
-    }
-
-    __global__ void map_patch_to_face(CUDABSP::CUDABSP* pCudaBSP,
-        CUDARAD::FaceInfo* faces, size_t num_faces)
-    {
-      if(!(threadIdx.x == 0 || threadIdx.y == 0))
-        return;
-      size_t count = 0;
-      for(int i = 0; i < num_faces; i++)
-      {
-        faces[i].patchStartIndex = count;
-        count += faces[i].lightmapSize;
-      }
-    }
-
-    __global__ void updateLight(CUDABSP::CUDABSP* pCudaBSP,
-        CUDARAD::FaceInfo* faces, size_t num_faces, PatchInfo* patches)
-    {
-      int face_index = blockIdx.x * blockDim.x + threadIdx.x;
-      if(face_index >= num_faces)
-        return;
-      FaceInfo face = faces[face_index];
-      int start = face.lightmapStartIndex;
-      int patch_index = face.patchStartIndex;
-      int width = face.lightmapWidth;
-      int height = face.lightmapHeight;
-      float3 totalLight = make_float3(0, 0, 0);
-      //printf("width %d | height %d | start %d | patch_index %d", width, height, start, patch_index);
-      for(int j = 0; j < height; j++)
-      {
-        int offset1 = j*width;
-        for(int k = 0; k < width; k++)
-        {
-//          printf("patch: %d || lightsample: %d\n", (int)(patch_index + offset1 + k),
-  //            (int)(start + offset1 + k));
- //         printf("\t j: %d, k: %d\n", j, k);
-          float3 light = patches[patch_index + offset1 + k].totalLight;
-          totalLight += light;
-          pCudaBSP->lightSamples[start + offset1 + k] = make_float3(light.x, light.y, light.z);
-          /*
-      if(face_index == num_faces-1)
-            printf("%d R: %f, G: %f, B: %f\n", patch_index+offset1+k, (float)light.x, (float)light.y, (float)light.z);
-          pCudaBSP->lightSamples[start + offset1 + width + k] = (
-               patches[patch_index + offset1 + k].totalLight +
-               patches[patch_index + offset1 + width + k + 1].totalLight +
-               patches[patch_index + offset1 + width + k].totalLight +
-               patches[patch_index + offset1 + k + 1].totalLight
-               )/4; */
-        }
-        //totalLight += patches[patch_index + offset1 + width-1].totalLight;
-      }
-      // Extrapolate
-      /*
-      if(height > 2)
-      {
-        for(int i = 0; i < width; i++)
-        {
-          float3 diff = pCudaBSP->lightSamples[start + width + i] -
-                          pCudaBSP->lightSamples[start + 2*width + i];
-          pCudaBSP->lightSamples[start + i] = pCudaBSP->lightSamples[start + width + i] + diff;
-        }
-      }
-      else
-      {
-        for(int i = 0; i < width; i++)
-        {
-          pCudaBSP->lightSamples[start + i] = pCudaBSP->lightSamples[start + width + i];
-        }
-      }*/
-      face.avgLight = totalLight / face.lightmapSize;
-      face.totalLight = totalLight;
-      pCudaBSP->lightSamples[start-1] = face.avgLight;
-    }
-
-    __global__ void generate_patch_info(CUDABSP::CUDABSP* pCudaBSP,
-        CUDARAD::FaceInfo* faces, size_t num_faces,
-        CUDARAD::PatchInfo* patches, size_t num_patches)
-    {
-      int face_index = blockIdx.x * blockDim.x + threadIdx.x;
-      if(face_index >= num_faces)
-        return;
-      CUDARAD::FaceInfo face = faces[face_index];
-      int patch_index = face.patchStartIndex;
-
-      int start = face.lightmapStartIndex;
-      float3 reflectivity = make_float3(
-          pCudaBSP->texDatas[face.texInfo.texData].reflectivity.x,
-          pCudaBSP->texDatas[face.texInfo.texData].reflectivity.y,
-          pCudaBSP->texDatas[face.texInfo.texData].reflectivity.z);
-      for(int j = 0; j < face.lightmapHeight; j++)
-      {
-        int offset1 = j*face.lightmapWidth;
-        for(int k = 0; k < face.lightmapWidth; k++)
-        {
-          // Calculate patch light
-          PatchInfo patch = patches[patch_index + offset1 + k];
-          patch.reflectivity = reflectivity;
-          patch.face_info = face;
-          patch.totalLight = pCudaBSP->lightSamples[start + offset1 + k];//]make_float3(pCudaBSP->lightSamples[start + offset1 + k].x, pCudaBSP->lightSamples[start + offset1 + k].y, pCudaBSP->lightSamples[start + offset1 + k].z);
-          patch.brightness = patch.totalLight;
-          patch.skip = false;
-          patches[patch_index + offset1 + k] = patch;
-          /*
-          if(face_index == num_faces - 1)
-          {
-            printf("%d R: %f, G: %f, B: %f\n", patch_index+offset1+k, patch.totalLight.x, patch.totalLight.y, patch.totalLight.z);
-          }
-          (
-              pCudaBSP->lightSamples[start + offset1 + face.lightmapWidth + k] +
-              pCudaBSP->lightSamples[start + offset1 + k] +
-              pCudaBSP->lightSamples[start + offset1 + face.lightmapWidth + k + 1] +
-              pCudaBSP->lightSamples[start + offset1 + k + 1]
-              ) / 4;
-          // Calculate vertices
-             CUDA_CHECK_ERROR_DEVICE(cudaMalloc(&patch.vertices, sizeof(float3)*4));
-             patch.vertices[0] = face.xyz_from_st((j + 1), (k + 1));
-             printf("DOOT\n");
-             patch.vertices[1] = face.xyz_from_st(j, (k + 1));
-             printf("DOOTDOOT\n");
-             patch.vertices[2] = face.xyz_from_st(j, k);
-             printf("DOOT\n");
-             patch.vertices[3] = face.xyz_from_st((j + 1), k);
-           */
-          // Fill in remaining data
-          //           printf("%d\n", patch_index);
-          patch.s = j;
-          patch.t = k;
-        }
-      }
-    }
-
-    __device__ float ff_diff_diff_by_patch(PatchInfo p1, PatchInfo p2)
-    {
-      float3 diff1Pos, diff1Norm, diff2Pos, diff2Norm;
-      diff1Pos = center(p1);
-      diff2Pos = center(p2);
-      diff1Norm = p1.face_info.faceNorm;
-      diff2Norm = p2.face_info.faceNorm;
-      return BouncedLighting::ff_diff_diff(diff1Pos, diff1Norm, diff2Pos, diff2Norm);
-    }
-
-    __device__ float ff_poly_diff_by_patch(PatchInfo p1, PatchInfo p2)
-    {
-      float3 diffPos = center(p1);
-      float3 diffNorm = p1.face_info.faceNorm;
-      return BouncedLighting::ff_diff_poly(diffPos, diffNorm, p2, 4);
-    }
-
-    __global__ void precompute_form_factors(float* formFactors, PatchInfo* patches, int numPatches)
-    {
-      for(int i = 0; i < numPatches; i++)
-      {
-        int offset = i*numPatches;
-        for(int j = 0; j < numPatches; j++)
-        {
-          float scale = ff_diff_diff_by_patch(patches[i], patches[j]);
-          if(scale < 0)
-            scale = ff_poly_diff_by_patch(patches[i], patches[j]);
-          if(isnan(scale) > 0)
-            scale = 0;
-          formFactors[offset + j] = scale;
-        }
-      }
-
-    }
-
-    __global__ void bounce_iter_pre(float* formFactors, PatchInfo* patches, int numPatches)
-    {
-      int i = blockIdx.x * blockDim.x + threadIdx.x;
-      for(int iter = 0; iter < MAX_ITER; iter++)
-      {
-        float3 reflect = patches[i].reflectivity;
-        int offset = i*numPatches;
-        for(int j = 0; j < numPatches; j++)
-        {
-          patches[i].receivedLight +=
-            formFactors[offset + j] * element_wise_mult(patches[j].brightness, reflect);
-        }
-        __syncthreads();
-        patches[i].totalLight += patches[i].receivedLight;
-        patches[i].brightness = patches[i].receivedLight;
-        __syncthreads();
-      }
-    }
-
 
     void bounce_lighting(BSP::BSP& bsp, CUDABSP::CUDABSP* pCudaBSP) {
-      // TODO timing
-      //pCudaBSP = make_cudabsp(bsp);
-      using Clock = std::chrono::high_resolution_clock;
+        using Clock = std::chrono::high_resolution_clock;
 
-      auto start = Clock::now();
-      bounce_lighting_fly(bsp, pCudaBSP);
-      auto end = Clock::now();
-      std::chrono::milliseconds ms
-        = std::chrono::duration_cast<std::chrono::milliseconds>(
-            end - start
+        auto start = Clock::now();
+
+        auto end = Clock::now();
+        std::chrono::milliseconds ms
+            = std::chrono::duration_cast<std::chrono::milliseconds>(
+                end - start
             );
 
-      std::cout << "Done! (" << ms.count() << "ms)" << std::endl;
-      //update_bsp(bsp, pCudabsp);
+        std::cout << "Done! (" << ms.count() << " ms)" << std::endl;
     }
-
-//    size_t count_patches(CUDABSP::CUDABSP* pCudaBSP, CUDARAD::FaceInfo* faces)
-    size_t count_patches(BSP::BSP& bsp)
-    {
-      size_t count = 0;
-      std::vector<BSP::Face> faces = bsp.get_faces();
-      for(int i = 0; i < faces.size(); i++)
-      {
-        count += faces[i].get_lightmap_size();
-      }
-      return count;
-    }
-
-    void bounce_lighting_fly(BSP::BSP& bsp, CUDABSP::CUDABSP* pCudaBSP){
-      size_t numFaces = bsp.get_faces().size();
-      std::cout << "Beginning bounce lightning" << std::endl;
-      // Calculate patches
-      FaceInfo* faces;
-      CUDA_CHECK_ERROR(
-          cudaMalloc(&faces, sizeof(CUDARAD::FaceInfo) * numFaces)
-          );
-      std::cout << "Generate FaceInfo for all faces" << std::endl;
-      const size_t BLOCK_WIDTH = 16;
-      const size_t BLOCK_HEIGHT = 16;
-      dim3 blockDim(BLOCK_WIDTH, BLOCK_HEIGHT);
-      KERNEL_LAUNCH(
-          generate_face_info,
-          div_ceil(numFaces, BLOCK_WIDTH), BLOCK_WIDTH,
-          pCudaBSP, faces
-          );
-
-      CUDA_CHECK_ERROR(cudaDeviceSynchronize());
-      size_t totalPatches = count_patches(bsp);
-      KERNEL_LAUNCH(
-          map_patch_to_face, 1, 1,
-          pCudaBSP, faces, numFaces
-          );
-
-      CUDA_CHECK_ERROR(cudaDeviceSynchronize());
-      std::cout << "Generate PatchInfo; " << totalPatches << " patches" << std::endl;
-      PatchInfo* patches;
-      CUDA_CHECK_ERROR(
-        cudaMalloc(&patches, sizeof(CUDARAD::PatchInfo) * totalPatches)
-        );
-
-
-      KERNEL_LAUNCH(
-          generate_patch_info,
-          div_ceil(numFaces, BLOCK_WIDTH), BLOCK_WIDTH,
-          pCudaBSP, faces, numFaces, patches, totalPatches
-          );
-      //generate_patch_info(pCudaBSP, faces, numFaces, patches);
-      CUDA_CHECK_ERROR(cudaDeviceSynchronize());
-
-      if(PRECOMPUTE) // really slow, takes too much memory, kinda broken
-      {
-        std::cout << "Compute Form Factor" << std::endl;
-        float* formFactors;
-        CUDA_CHECK_ERROR(
-            cudaMalloc(&formFactors, sizeof(float) * totalPatches * totalPatches)
-            );
-
-        KERNEL_LAUNCH(
-            precompute_form_factors,
-            div_ceil(numFaces, BLOCK_WIDTH), BLOCK_WIDTH,
-            formFactors, patches, totalPatches
-            );
-        CUDA_CHECK_ERROR(cudaDeviceSynchronize());
-
-        std::cout << "Begin iteration" << std::endl;
-        KERNEL_LAUNCH(
-            bounce_iter_pre,
-            div_ceil(totalPatches, BLOCK_WIDTH), BLOCK_WIDTH,
-            formFactors, patches, totalPatches
-            );
-      }
-      else
-      {
-        std::cout << "Begin iteration" << std::endl;
-        const size_t BLOCK_WIDTH2 = 64;
-        for(int i = 0; i < MAX_ITER; i++)
-        {
-          KERNEL_LAUNCH(
-              bounce_iteration,
-              div_ceil(totalPatches, BLOCK_WIDTH2), BLOCK_WIDTH2,
-              pCudaBSP, patches, totalPatches
-              );
-        }
-      }
-      CUDA_CHECK_ERROR(cudaDeviceSynchronize());
-      std::cout << "Gathering light" << std::endl;
-      KERNEL_LAUNCH(
-          updateLight,
-          div_ceil(numFaces, BLOCK_WIDTH), BLOCK_WIDTH,
-          pCudaBSP, faces, numFaces, patches
-          );
-      CUDA_CHECK_ERROR(cudaDeviceSynchronize());
-
-
-      std::cout << "Freeing memory" << std::endl;
-      CUDA_CHECK_ERROR(cudaFree(faces));
-      CUDA_CHECK_ERROR(cudaFree(patches));
-
-    }
-
-
-    __global__ void bounce_iteration(CUDABSP::CUDABSP* pCudaBSP,
-        PatchInfo* patches, int totalNumPatches)
-    {
-      int index = blockIdx.x * blockDim.x + threadIdx.x;
-      //printf("%d, %d, %d\n", received_light.x, received_light.y, received_light.z);
-      if(index >= totalNumPatches)
-        return;
-      if(patches[index].skip)
-        return;
-      const float EPSILON = 1e-3;
-      float3 reflectivity = patches[index].reflectivity;
-      patches[index].receivedLight = make_float3(0, 0, 0);
-      float3 center1 = center(patches[index]);
-      for(int j = 0; j < totalNumPatches; j++)
-      {
-        if(j == index)
-          continue;
-        /* is it worth doing the memcmp?
-           if(memcmp(receiver.face_info, patch.face_info, sizeof(ptr)) == 0)
-           continue;
-         */
-        float scale = ff_diff_diff_by_patch(patches[index], patches[j]);
-        if(scale < 0)
-          scale = ff_poly_diff_by_patch(patches[index], patches[j]);
-        if(isnan(scale) == 0)
-          patches[index].receivedLight += element_wise_mult(reflectivity, patches[j].brightness) * scale;
-      }
-      // Update array with information
-      patches[index].totalLight += patches[index].receivedLight;
-      patches[index].brightness = patches[index].receivedLight;
-
-      if(patches[index].receivedLight.x < EPSILON &&
-         patches[index].receivedLight.y < EPSILON &&
-         patches[index].receivedLight.z < EPSILON)
-        patches[index].skip = true;
-    }
-
-
-    static __device__ inline float3 element_wise_mult(float3 f1, float3 f2)
-    {
-      return make_float3(f1.x * f2.x, f1.y * f2.y, f1.z * f2.z);
-    }
-
-    __device__ float3 center(PatchInfo patch)
-    {
-      return patch.face_info.xyz_from_st(patch.s, patch.t);
-      /*
-      float3 p1 = patch.face_info.xyz_from_st(patch.s, patch.t);
-      float3 p2 = patch.face_info.xyz_from_st(patch.s+1, patch.t);
-      float3 p3 = patch.face_info.xyz_from_st(patch.s+1, patch.t+1);
-      float3 p4 = patch.face_info.xyz_from_st(patch.s, patch.t+1);
-      float3 p = p1 + p2 + p3 + p4;
-      return p/4;
-      */
-    }
-
-    static __device__ inline float distance(float3 p1, float3 p2)
-    {
-      // Calculate the distance between the centers of the two patches
-      /*
-      return len(p2-p1);
-      */
-      float diff_x = p1.x - p2.x;
-      float diff_y = p1.y - p2.y;
-      float diff_z = p1.z - p2.z;
-      return sqrt(diff_x*diff_x + diff_y*diff_y + diff_z*diff_z);
-    }
-
-    /*
-    __global__ void avg_light(CUDARAD::FaceInfo* faces, int num_faces,
-                              CUDARAD::PatchInfo* patches, int num_patches)
-    {
-      // Get average lighting for all patches in the face
-
-      int face_index = threadIdx.x + threadIdx.y * blockDim.x;
-      if(face_index > num_faces)
-        return;
-
-      float3 sum = make_float3(0, 0, 0);
-      for(int i = 0; i < num_patches; i++)
-      {
-        sum += patches[i].brightness; // TODO probaly not correct
-      }
-
-      faces[face_index].avgLight = sum / num_patches;
-    }
-    */
 
     void compute_ambient_lighting(CUDABSP::CUDABSP* pCudaBSP) {
+        using Clock = std::chrono::high_resolution_clock;
+
+        auto start = Clock::now();
+
         const size_t BLOCK_WIDTH = 32;
         
         size_t numLeaves;
@@ -1645,5 +1211,13 @@ namespace CUDARAD {
         );
 
         CUDA_CHECK_ERROR(cudaDeviceSynchronize());
+
+        auto end = Clock::now();
+        std::chrono::milliseconds ms
+            = std::chrono::duration_cast<std::chrono::milliseconds>(
+                end - start
+                );
+
+        std::cout << "Done! (" << ms.count() << " ms)" << std::endl;
     }
 }

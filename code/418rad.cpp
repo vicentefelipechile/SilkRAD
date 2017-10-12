@@ -39,6 +39,7 @@ void print_cudainfo(void) {
         << deviceProps.maxGridSize[1] << std::endl;
     std::cout << "    Max Grid Size Z: "
         << deviceProps.maxGridSize[2] << std::endl;
+    std::cout << std::endl;
 }
 
 
@@ -48,7 +49,7 @@ int main(int argc, char** argv) {
         return 1;
     }
     
-    std::cout << "418RAD -- 15-418 Radiosity Simulator" << std::endl;
+    std::cout << "SilkRAD -- GPU-Accelerated Radiosity Simulator" << std::endl;
 
     const std::string filename(argv[1]);
     std::ifstream f(filename, std::ios::binary);
@@ -91,6 +92,17 @@ int main(int argc, char** argv) {
     std::cout << "Compute direct lighting..." << std::endl;
     CUDARAD::compute_direct_lighting(*pBSP, pCudaBSP);
 
+    std::cout << "Run lightmap FXAA passes..." << std::endl;
+    const size_t NUM_FXAA_PASSES = 5;
+    for (size_t i = 0; i<NUM_FXAA_PASSES; i++) {
+        std::cout << "    Pass "
+            << i + 1 << "/" << NUM_FXAA_PASSES << "..."
+            << std::endl;
+
+        CUDAFXAA::antialias_lightsamples(pCudaBSP);
+    }
+    std::cout << "Done!" << std::endl;
+
     //std::cout << "Run direct lighting antialiasing pass..." << std::endl;
     //CUDARAD::antialias_direct_lighting(*pBSP, pCudaBSP);
 
@@ -99,17 +111,6 @@ int main(int argc, char** argv) {
 
     std::cout << "Compute ambient lighting..." << std::endl;
     CUDARAD::compute_ambient_lighting(pCudaBSP);
-
-    std::cout << "Run lightmap FXAA passes..." << std::endl;
-    const size_t NUM_FXAA_PASSES = 5;
-    for (size_t i=0; i<NUM_FXAA_PASSES; i++) {
-        std::cout << "    Pass "
-            << i + 1 << "/" << NUM_FXAA_PASSES << "..."
-            << std::endl;
-
-        CUDAFXAA::antialias_lightsamples(pCudaBSP);
-    }
-    std::cout << "Done!" << std::endl;
 
     std::cout << "Convert light samples to RGBExp32..." << std::endl;
     CUDABSP::convert_lightsamples(pCudaBSP);

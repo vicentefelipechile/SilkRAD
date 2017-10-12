@@ -277,7 +277,6 @@ namespace CUDABSP {
         );
         // Don't need to copy light samples since we're computing them.
 
-
         CUDA_CHECK_ERROR(
             cudaMalloc(
                 &cudaBSP.rgbExp32LightSamples,
@@ -398,7 +397,7 @@ namespace CUDABSP {
             )
         );
 
-        size_t BLOCK_WIDTH = 1024;
+        const size_t BLOCK_WIDTH = 1024;
         size_t numBlocks = div_ceil(cudaBSP.numLightSamples, BLOCK_WIDTH);
 
         KERNEL_LAUNCH(
