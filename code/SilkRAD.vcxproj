@@ -20,7 +20,7 @@
     <ClInclude Include="raytracer.h" />
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="418rad.cpp" />
+    <ClCompile Include="silkrad.cpp" />
     <ClCompile Include="bsp.cpp" />
   </ItemGroup>
   <ItemGroup>

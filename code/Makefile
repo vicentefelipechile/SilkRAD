@@ -1,5 +1,5 @@
-418RAD: 418rad.o bsp.o cudabsp.o cudarad.o raytracer.o
-	nvcc -m64 418rad.o bsp.o cudabsp.o cudarad.o raytracer.o -std=c++11 -o rad -g -lcudart -lcudadevrt
+silkrad: silkrad.o bsp.o cudabsp.o cudarad.o raytracer.o
+	nvcc -m64 silkrad.o bsp.o cudabsp.o cudarad.o raytracer.o -std=c++11 -o silkrad -g -lcudart -lcudadevrt
 
 bsp.o: bsp.cpp bsp.h
 	nvcc -m64 bsp.cpp -O3 -I ./include -std=c++11 -c -g -arch=compute_35 -rdc=true
@@ -7,8 +7,8 @@ bsp.o: bsp.cpp bsp.h
 bsp_mingw.o: bsp.cpp bsp.h
 	g++ bsp.cpp -I ./include -Wall -Wextra -Wfatal-errors -std=c++11 -o bsp_mingw.o -c -g
 
-418rad.o: 418rad.cpp bsp.h
-	nvcc -m64 418rad.cpp -O3 -I ./include -std=c++11 -c -g -arch=compute_35 -rdc=true
+silkrad.o: silkrad.cpp bsp.h
+	nvcc -m64 silkrad.cpp -O3 -I ./include -std=c++11 -c -g -arch=compute_35 -rdc=true
 
 cudabsp.o: cudabsp.cu cudabsp.h
 	nvcc -m64 cudabsp.cu -O3 -I ./include -std=c++11 -c -g -arch=compute_35 -rdc=true
@@ -34,7 +34,7 @@ examinebsp: examinebsp.o bsp_mingw.o
 clean:
 	-rm -f *.o
 	-rm -f *.exe
-	-rm -f 418RAD
+	-rm -f silkrad
 	-rm -f rad
 	-rm -f *.out
 	-rm -f comparelumps

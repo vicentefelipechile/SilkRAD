@@ -29,8 +29,8 @@
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="418rad.cpp" />
     <ClCompile Include="bsp.cpp" />
+    <ClCompile Include="silkrad.cpp" />
   </ItemGroup>
   <ItemGroup>
     <CudaCompile Include="cudabsp.cu" />
