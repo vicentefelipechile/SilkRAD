@@ -1,0 +1,42 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="headers">
+      <UniqueIdentifier>{a167f251-6846-4b26-9595-d60e089841d3}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="bsp.h">
+      <Filter>headers</Filter>
+    </ClInclude>
+    <ClInclude Include="cudabsp.h">
+      <Filter>headers</Filter>
+    </ClInclude>
+    <ClInclude Include="cudamatrix.h">
+      <Filter>headers</Filter>
+    </ClInclude>
+    <ClInclude Include="cudarad.h">
+      <Filter>headers</Filter>
+    </ClInclude>
+    <ClInclude Include="cudautils.h">
+      <Filter>headers</Filter>
+    </ClInclude>
+    <ClInclude Include="fxaa.h">
+      <Filter>headers</Filter>
+    </ClInclude>
+    <ClInclude Include="raytracer.h">
+      <Filter>headers</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="418rad.cpp" />
+    <ClCompile Include="bsp.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <CudaCompile Include="cudabsp.cu" />
+    <CudaCompile Include="cudamatrix.cu" />
+    <CudaCompile Include="cudarad.cu" />
+    <CudaCompile Include="fxaa.cu" />
+    <CudaCompile Include="raytracer.cu" />
+  </ItemGroup>
+</Project>
