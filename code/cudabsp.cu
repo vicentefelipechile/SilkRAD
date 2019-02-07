@@ -144,7 +144,7 @@ namespace CUDABSP {
 
     CUDABSP* make_cudabsp(const BSP::BSP& bsp) {
         CUDABSP cudaBSP;
-        
+
         // To detect corruption.
         cudaBSP.tag = TAG;
 

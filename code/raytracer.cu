@@ -83,7 +83,7 @@ namespace RayTracer {
             KDNode* nodes,
             size_t depth
             ) {
-            
+
         //printf("Split nodes (depth %u)...\n", static_cast<unsigned int>(depth));
 
         KDNode& node = nodes[threadIdx.x];
@@ -159,7 +159,7 @@ namespace RayTracer {
         CUDA_CHECK_ERROR_DEVICE(
             cudaMalloc(&leftTriIDs, sizeof(size_t) * node.numTris)
         );
-        
+
         size_t* rightTriIDs;
         CUDA_CHECK_ERROR_DEVICE(
             cudaMalloc(&rightTriIDs, sizeof(size_t) * node.numTris)
@@ -184,7 +184,7 @@ namespace RayTracer {
                         if (tri.vertices[vertex].x >= node.pos) {
                             onRight = true;
                         }
-                        
+
                         break;
 
                     case AXIS_Y:
@@ -259,7 +259,7 @@ namespace RayTracer {
             if (threadIdx.x == 0) {
                 CUDA_CHECK_ERROR_DEVICE(cudaFree(nodes));
             }
-            
+
             KERNEL_LAUNCH_DEVICE(
                 cleanup_nodes, 1, 2,
                 children
@@ -286,7 +286,7 @@ namespace RayTracer {
         if (m_triangles != nullptr) {
             cudaFree(m_triangles);
         }
-        
+
         if (m_pTreeRoot != nullptr) {
             destroy_tree();
         }
@@ -294,7 +294,7 @@ namespace RayTracer {
 
     __host__ void CUDARayTracer::build_tree(void) {
         KDNode root;
-        
+
         root.type = NODETYPE_NODE;
 
         root.tmin = m_tmin;
@@ -347,7 +347,7 @@ namespace RayTracer {
     __host__ void CUDARayTracer::add_triangles(
             const std::vector<Triangle>& tris
             ) {
-            
+
         // This method should only ever be called exactly once.
         assert(m_triangles == nullptr);
         assert(m_numTriangles == 0);
@@ -437,7 +437,7 @@ namespace RayTracer {
             1.0 / (dir.y + ((dir.y < 0) ? -EPSILON : EPSILON)),
             1.0 / (dir.z + ((dir.z < 0) ? -EPSILON : EPSILON))
         );
-        
+
         struct StackEntry {
             KDNode* pNode;
             float3 start;
@@ -466,7 +466,7 @@ namespace RayTracer {
             float3 end = entry.end;
 
             float len = dist(start, end);
-            
+
             KDNode* children = pNode->children;
 
             float t;
@@ -476,9 +476,9 @@ namespace RayTracer {
                     for (size_t ti=0; ti<pNode->numTris; ti++) {
                         Triangle& tri = m_triangles[pNode->triangleIDs[ti]];
 
-                        // The M-T intersection algorithm uses CCW vertex 
-                        // winding, but Source uses CW winding. So, we need to 
-                        // pass the vertices in reverse order to get backface 
+                        // The M-T intersection algorithm uses CCW vertex
+                        // winding, but Source uses CW winding. So, we need to
+                        // pass the vertices in reverse order to get backface
                         // culling to work correctly.
                         bool isLOSBlocked = intersects(
                             tri.vertices[2], tri.vertices[1], tri.vertices[0],
@@ -545,7 +545,7 @@ namespace RayTracer {
                             start,
                             clipPoint,
                         };
-                        
+
                         if (stackSize >= 1024) {
                             printf("ALERT: Stack size too big!!!\n");
                             return false;

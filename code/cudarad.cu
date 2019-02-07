@@ -1194,7 +1194,7 @@ namespace CUDARAD {
         auto start = Clock::now();
 
         const size_t BLOCK_WIDTH = 32;
-        
+
         size_t numLeaves;
 
         CUDA_CHECK_ERROR(
@@ -1203,7 +1203,7 @@ namespace CUDARAD {
                 cudaMemcpyDeviceToHost
             )
         );
-        
+
         KERNEL_LAUNCH(
             AmbientLighting::map_leaves,
             numLeaves, BLOCK_WIDTH,

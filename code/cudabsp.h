@@ -59,9 +59,9 @@ namespace CUDABSP {
     void convert_lightsamples(CUDABSP* pCudaBSP);
 
     /**
-    * Updates the given BSP using the information contained in the given
-    * CUDABSP (which should be on the device).
-    */
+     * Updates the given BSP using the information contained in the given
+     * CUDABSP (which should be on the device).
+     */
     void update_bsp(BSP::BSP& bsp, CUDABSP* pCudaBSP);
 }
 

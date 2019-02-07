@@ -48,12 +48,12 @@ int main(int argc, char** argv) {
         std::cerr << "Invalid arguments." << std::endl;
         return 1;
     }
-    
+
     std::cout << "SilkRAD -- GPU-Accelerated Radiosity Simulator" << std::endl;
 
     const std::string filename(argv[1]);
     std::ifstream f(filename, std::ios::binary);
-    
+
     std::unique_ptr<BSP::BSP> pBSP;
 
     try {
@@ -66,7 +66,7 @@ int main(int argc, char** argv) {
 
     /*
      * HACK!
-     * Disable normal maps throughout the entire BSP, because I didn't 
+     * Disable normal maps throughout the entire BSP, because I didn't
      * implement them and we don't have time.
      */
     for (const BSP::TexInfo& texInfo : pBSP->get_texinfos()) {
@@ -83,7 +83,7 @@ int main(int argc, char** argv) {
 
     std::cout << "Copy BSP to device memory..." << std::endl;
     CUDABSP::CUDABSP* pCudaBSP = CUDABSP::make_cudabsp(*pBSP);
-    
+
     std::cout << "Initialize radiosity subsystem..." << std::endl;
     CUDARAD::init(*pBSP);
 
@@ -123,17 +123,17 @@ int main(int argc, char** argv) {
     /*
      * Mark the BSP as non-fullbright.
      *
-     * This tells the engine that there is actually lighting information 
+     * This tells the engine that there is actually lighting information
      * embedded in the map.
      */
     pBSP->set_fullbright(false);
 
     pBSP->write("out.bsp");
-    
+
     std::cout << "Wrote to file \"out.bsp\"." << std::endl;
 
     /* Tear down the radiosity subsystem. */
     CUDARAD::cleanup();
-    
+
     return 0;
 }
