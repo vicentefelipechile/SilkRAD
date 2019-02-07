@@ -7,8 +7,9 @@
 #include "cuda_runtime.h"
 
 #include "cudabsp.h"
-#include "cudamatrix.h"
+#include "bsp_shared.h"
 
+#include "cudamatrix.h"
 #include "cudautils.h"
 
 
@@ -125,6 +126,51 @@ namespace CUDABSP {
         }
     }
 
+    __device__ int16_t cluster_for_pos(
+            const CUDABSP& cudaBSP, float3 pos
+            ) {
+
+        return BSPShared::cluster_for_pos(
+            cudaBSP.planes, cudaBSP.nodes, cudaBSP.leaves,
+            pos
+        );
+    }
+
+    __device__ uint8_t* pvs_for_pos(const CUDABSP& cudaBSP, float3 pos) {
+        int16_t cluster = cluster_for_pos(cudaBSP, pos);
+        if (cluster == -1) {
+            // Failed to find a cluster... now what do we do???
+            return nullptr;
+        }
+
+        size_t numClusters = cudaBSP.numVisClusters;
+        size_t pvsRowSize = sizeof(uint8_t) * div_ceil(numClusters, 8);
+
+        return cudaBSP.visMatrix + pvsRowSize * cluster;
+    }
+
+    __device__ bool cluster_in_pvs(
+            int16_t cluster, uint8_t* pvs, size_t numClusters
+            ) {
+
+        if (pvs == nullptr) {
+            // If we don't have a valid PVS, assume we're outside the world
+            // and therefore can see everything.
+            return true;
+        }
+
+        if (static_cast<size_t>(cluster) >= numClusters) {
+            return false;
+        }
+
+        size_t byteIndex = cluster / 8;
+        size_t bitIndex = cluster % 8;
+
+        uint8_t byte = pvs[byteIndex];
+
+        return ((byte >> bitIndex) & 0x1) != 0x0;
+    }
+
     __global__ void map_lightsamples(
             float3* lightSamples,
             BSP::RGBExp32* rgbExp32LightSamples,
@@ -158,9 +204,11 @@ namespace CUDABSP {
         cudaBSP.numLightSamples = bsp.get_lightsamples().size();
         cudaBSP.numTexInfos = bsp.get_texinfos().size();
         cudaBSP.numTexDatas = bsp.get_texdatas().size();
+        cudaBSP.numNodes = bsp.get_nodes().size();
         cudaBSP.numLeaves = bsp.get_leaves().size();
         cudaBSP.numAmbientLightSamples = bsp.get_ambient_samples().size();
         cudaBSP.numWorldLights = bsp.get_worldlights().size();
+        cudaBSP.numVisClusters = bsp.get_visibility().size();
 
         size_t modelsSize = sizeof(BSP::DModel) * cudaBSP.numModels;
         size_t planesSize = sizeof(BSP::DPlane) * cudaBSP.numPlanes;
@@ -174,6 +222,7 @@ namespace CUDABSP {
             = sizeof(BSP::RGBExp32) * cudaBSP.numLightSamples;
         size_t texInfosSize = sizeof(BSP::TexInfo) * cudaBSP.numTexInfos;
         size_t texDatasSize = sizeof(BSP::DTexData) * cudaBSP.numTexDatas;
+        size_t nodesSize = sizeof(BSP::DNode) * cudaBSP.numNodes;
         size_t leavesSize = sizeof(BSP::DLeaf) * cudaBSP.numLeaves;
         size_t ambientIndicesSize
             = sizeof(BSP::DLeafAmbientIndex) * cudaBSP.numLeaves;
@@ -182,6 +231,9 @@ namespace CUDABSP {
                 * cudaBSP.numAmbientLightSamples;
         size_t worldLightsSize
             = sizeof(BSP::DWorldLight) * cudaBSP.numWorldLights;
+        size_t visMatrixSize = sizeof(uint8_t)
+            * div_ceil(cudaBSP.numVisClusters, 8)
+            * cudaBSP.numVisClusters;
 
         /* Copy the BSP's data to device memory. */
         CUDA_CHECK_ERROR(cudaMalloc(&cudaBSP.models, modelsSize));
@@ -303,6 +355,15 @@ namespace CUDABSP {
             )
         );
 
+        CUDA_CHECK_ERROR(cudaMalloc(&cudaBSP.nodes, nodesSize));
+        CUDA_CHECK_ERROR(
+            cudaMemcpy(
+                cudaBSP.nodes, bsp.get_nodes().data(),
+                nodesSize,
+                cudaMemcpyHostToDevice
+            )
+        );
+
         CUDA_CHECK_ERROR(cudaMalloc(&cudaBSP.leaves, leavesSize));
         CUDA_CHECK_ERROR(
             cudaMemcpy(
@@ -343,6 +404,24 @@ namespace CUDABSP {
             )
         );
 
+        /* Flatten the visibility matrix */
+        std::vector<uint8_t> flattenedVisMatrix;
+        for (const std::vector<uint8_t>& clusterVis : bsp.get_visibility()) {
+            assert(clusterVis.size() == div_ceil(cudaBSP.numVisClusters, 8));
+            for (uint8_t pvsByte : clusterVis) {
+                flattenedVisMatrix.push_back(pvsByte);
+            }
+        }
+
+        CUDA_CHECK_ERROR(cudaMalloc(&cudaBSP.visMatrix, visMatrixSize));
+        CUDA_CHECK_ERROR(
+            cudaMemcpy(
+                cudaBSP.visMatrix, flattenedVisMatrix.data(),
+                visMatrixSize,
+                cudaMemcpyHostToDevice
+            )
+        );
+
         /* Copy the CUDABSP structure to device memory. */
         CUDABSP* pCudaBSP;
         CUDA_CHECK_ERROR(cudaMalloc(&pCudaBSP, sizeof(CUDABSP)));
@@ -378,10 +457,12 @@ namespace CUDABSP {
         CUDA_CHECK_ERROR(cudaFree(cudaBSP.rgbExp32LightSamples));
         CUDA_CHECK_ERROR(cudaFree(cudaBSP.texInfos));
         CUDA_CHECK_ERROR(cudaFree(cudaBSP.texDatas));
+        CUDA_CHECK_ERROR(cudaFree(cudaBSP.nodes));
         CUDA_CHECK_ERROR(cudaFree(cudaBSP.leaves));
         CUDA_CHECK_ERROR(cudaFree(cudaBSP.ambientIndices));
         CUDA_CHECK_ERROR(cudaFree(cudaBSP.ambientLightSamples));
         CUDA_CHECK_ERROR(cudaFree(cudaBSP.worldLights));
+        CUDA_CHECK_ERROR(cudaFree(cudaBSP.visMatrix));
 
         /* Free the device pointer itself. */
         CUDA_CHECK_ERROR(cudaFree(pCudaBSP));

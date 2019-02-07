@@ -71,9 +71,11 @@ namespace RayTracer {
         float3& vertex2 = tri.vertices[1];
         float3& vertex3 = tri.vertices[2];
 
-        vertex1 += normalized(vertex1 - 0.5 * (vertex2 + vertex3)) * EPSILON;
-        vertex2 += normalized(vertex2 - 0.5 * (vertex1 + vertex3)) * EPSILON;
-        vertex3 += normalized(vertex3 - 0.5 * (vertex1 + vertex2)) * EPSILON;
+        float3 center = (vertex1 + vertex2 + vertex3) / 3.0f;
+
+        vertex1 += normalized(vertex1 - center) * EPSILON;
+        vertex2 += normalized(vertex2 - center) * EPSILON;
+        vertex3 += normalized(vertex3 - center) * EPSILON;
     }
 
     static const size_t MAX_DEPTH = 10;
@@ -455,7 +457,7 @@ namespace RayTracer {
 
         while (stackSize > 0) {
             if (stackSize >= 1024) {
-                printf("ALERT: Stack size too big!!!\n");
+                printf("ALERT: Raytracer stack size too big!!!\n");
                 return false;
             }
 

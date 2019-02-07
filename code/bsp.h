@@ -15,6 +15,7 @@
 
 #include <gmtl/Matrix.h>
 
+
 namespace BSP {
     inline constexpr uint32_t make_id(
             uint32_t a, uint32_t b, uint32_t c, uint32_t d
@@ -141,6 +142,11 @@ namespace BSP {
         T z;
     };
 
+    struct DVis {
+        int32_t numClusters;
+        int32_t firstByteOffsetPair[2];
+    };
+
     struct DPlane {
         Vec3<float> normal;
         float dist;
@@ -253,6 +259,17 @@ namespace BSP {
         CONTENTS_HITBOX = 0x40000000,
     };
 
+    struct DNode {
+        int32_t planeNum;
+        int32_t children[2];
+        int16_t mins[3];
+        int16_t maxs[3];
+        uint16_t firstFace;
+        uint16_t numFaces;
+        int16_t area;
+        int16_t _;  // unused
+    };
+
     struct DLeaf {
         uint32_t contents;
         int16_t cluster;
@@ -314,7 +331,7 @@ namespace BSP {
         uint8_t x;
         uint8_t y;
         uint8_t z;
-        uint8_t unused;
+        uint8_t _;  // unused
     };
 
     struct DLeafAmbientIndex {
@@ -369,6 +386,7 @@ namespace BSP {
     class Light {
         private:
             Vec3<float> m_coords;
+            int16_t m_cluster;
 
         public:
             double r;
@@ -385,7 +403,7 @@ namespace BSP {
 
             EmitType emitType;
 
-            Light(const Entity& entity);
+            Light(const BSP& bsp, const Entity& entity);
 
             inline double attenuate(double distance) const {
                 return c + l * distance + q * distance * distance;
@@ -480,6 +498,9 @@ namespace BSP {
     class BSP {
         friend Face::Face(BSP&, DFace&);
 
+        public:
+            using VisMatrix = std::vector<std::vector<uint8_t>>;
+
         private:
             Header m_header;
 
@@ -493,6 +514,7 @@ namespace BSP {
             std::vector<TexInfo> m_texInfos;
             std::vector<DTexData> m_texDatas;
             std::vector<Face> m_faces;
+            std::vector<DNode> m_nodes;
             std::vector<DLeaf> m_leaves;
             std::vector<DLeafAmbientIndex> m_ambientLightIndices;
             std::vector<DLeafAmbientLighting> m_ambientLightSamples;
@@ -500,6 +522,14 @@ namespace BSP {
 
             std::string m_entData;
             std::vector<Light> m_lights;
+
+            // Original raw visibility lump data, because I'm too lazy to
+            // actually bother writing the visibility lump compression
+            // algorithm myself.
+            std::vector<uint8_t> m_visLumpData;
+
+            // Decompressed visibility matrix
+            VisMatrix m_visibility;
 
             std::unordered_map<int, std::vector<uint8_t>> m_extraLumps;
             std::unordered_map<int32_t, std::vector<uint8_t>> m_extraGameLumps;
@@ -520,6 +550,7 @@ namespace BSP {
             );
 
             void load_lights(const std::string& entData);
+            void load_visibility(std::ifstream& file);
             void load_extras(std::ifstream& file);
 
             void load_gamelumps(std::ifstream& file);
@@ -548,6 +579,12 @@ namespace BSP {
             //);
 
             void save_lights(
+                std::ofstream& file,
+                std::unordered_map<int, std::ofstream::off_type>& offsets,
+                std::unordered_map<int, size_t>& sizes
+            );
+
+            void save_visibility(
                 std::ofstream& file,
                 std::unordered_map<int, std::ofstream::off_type>& offsets,
                 std::unordered_map<int, size_t>& sizes
@@ -602,6 +639,7 @@ namespace BSP {
             std::vector<Face>& get_faces(void);
             const std::vector<Face>& get_faces(void) const;
 
+            const std::vector<DNode>& get_nodes(void) const;
             const std::vector<DLeaf>& get_leaves(void) const;
 
             std::vector<DLeafAmbientIndex>& get_ambient_indices(void);
@@ -617,6 +655,9 @@ namespace BSP {
 
             const std::string& get_entdata(void);
 
+            const VisMatrix& get_visibility(void) const;
+            int16_t cluster_for_pos(const Vec3<float>& pos) const;
+
             const std::unordered_map<int, std::vector<uint8_t>>&
                 get_extras(void) const;
 
@@ -625,6 +666,8 @@ namespace BSP {
 
             bool is_fullbright(void) const;
             void set_fullbright(bool fullbright);
+
+            bool has_visibility_data(void) const;
 
             void write(const std::string& filename);
             void write(std::ofstream& file);

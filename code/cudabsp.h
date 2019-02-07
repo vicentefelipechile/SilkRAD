@@ -12,7 +12,15 @@
 
 
 namespace CUDABSP {
+    struct CUDABSP;
+
     __device__ BSP::RGBExp32 rgbexp32_from_float3(float3 color);
+
+    __device__ int16_t cluster_for_pos(const CUDABSP& cudaBSP, float3 pos);
+    __device__ uint8_t* pvs_for_pos(const CUDABSP& cudaBSP, float3 pos);
+    __device__ bool cluster_in_pvs(
+        int16_t cluster, uint8_t* pvs, size_t numClusters
+    );
 
     const uint32_t TAG = 0xdeadbeef;
 
@@ -30,10 +38,12 @@ namespace CUDABSP {
         BSP::RGBExp32* rgbExp32LightSamples;
         BSP::TexInfo* texInfos;
         BSP::DTexData* texDatas;
+        BSP::DNode* nodes;
         BSP::DLeaf* leaves;
         BSP::DLeafAmbientIndex* ambientIndices;
         BSP::DLeafAmbientLighting* ambientLightSamples;
         BSP::DWorldLight* worldLights;
+        uint8_t* visMatrix;
 
         size_t numModels;
         size_t numPlanes;
@@ -44,9 +54,11 @@ namespace CUDABSP {
         size_t numLightSamples;
         size_t numTexInfos;
         size_t numTexDatas;
+        size_t numNodes;
         size_t numLeaves;
         size_t numAmbientLightSamples;
         size_t numWorldLights;
+        size_t numVisClusters;
     };
 
     /** Creates a new CUDABSP on the device, and returns a pointer to it. */
