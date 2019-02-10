@@ -32,6 +32,7 @@ namespace BSP {
     const size_t MAX_MAP_TEXDATA = 2048;
     const size_t MAX_MAP_TEXDATA_STRING_DATA = 256000;
     const size_t TEXTURE_NAME_LENGTH = 128;
+    const size_t MAX_LUXELS_PER_FACE = 32 * 32;
 
     /* Standard Gamma-correction constants */
     const double GAMMA = 2.2;

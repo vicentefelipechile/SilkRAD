@@ -11,8 +11,8 @@ namespace RayTracer {
         float3 vertices[3];
     };
 
-    enum KDNodeType {NODETYPE_NODE, NODETYPE_LEAF};
-    enum Axis {AXIS_X, AXIS_Y, AXIS_Z};
+    enum class KDNodeType {NODE, LEAF};
+    enum class Axis {X, Y, Z};
 
     struct KDNode {
         KDNodeType type;
@@ -31,13 +31,13 @@ namespace RayTracer {
     //class KDTree {
     //    private:
     //        KDNode* m_root;
-    //        
+    //
     //    public:
     //        KDTree();
     //};
 
     /**
-     * Ray-trace acceleration structure whose data resides solely in device 
+     * Ray-trace acceleration structure whose data resides solely in device
      * memory.
      */
     class CUDARayTracer {
@@ -55,7 +55,7 @@ namespace RayTracer {
 
             __host__ void build_tree(void);
             __host__ void destroy_tree(void);
-            
+
         public:
             CUDARayTracer();
             CUDARayTracer(const CUDARayTracer& other) = delete;

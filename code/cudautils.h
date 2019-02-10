@@ -5,6 +5,10 @@
 #include <cstdlib>
 #include <cstdio>
 
+#ifdef __CUDACC__
+#include "cub/cub.cuh"
+#endif
+
 #include "cuda_runtime.h"
 #include "device_launch_parameters.h"
 
@@ -28,6 +32,66 @@ inline void cuda_assert(
 }
 
 
+inline __device__ void cuda_device_abort(void) {
+#ifdef __CUDACC__
+    asm("trap;");
+#endif
+}
+
+
+template <
+    typename T, size_t count,
+    size_t BLOCK_WIDTH, size_t BLOCK_HEIGHT,
+    size_t ITEMS_PER_THREAD
+>
+inline __device__ void prefix_sum(T (&in)[count], T (&out)[count]) {
+#ifdef __CUDACC__
+    using Loader = cub::BlockLoad<
+        T,
+        BLOCK_WIDTH,
+        ITEMS_PER_THREAD,
+        cub::BLOCK_LOAD_DIRECT,
+        BLOCK_HEIGHT
+    >;
+
+    using Scanner = cub::BlockScan<
+        T,
+        BLOCK_WIDTH,
+        cub::BLOCK_SCAN_RAKING,
+        BLOCK_HEIGHT
+    >;
+
+    using Storer = cub::BlockStore<
+        T,
+        BLOCK_WIDTH,
+        ITEMS_PER_THREAD,
+        cub::BLOCK_STORE_DIRECT,
+        BLOCK_HEIGHT
+    >;
+
+    __shared__ union {
+        typename Loader::TempStorage load;
+        typename Scanner::TempStorage scan;
+        typename Storer::TempStorage store;
+    } tempStorage;
+
+    T data[ITEMS_PER_THREAD];
+
+    Loader(tempStorage.load).Load(in, data);
+
+    __syncthreads();
+
+    Scanner(tempStorage.scan).ExclusiveSum(data, data);
+
+    __syncthreads();
+
+    Storer(tempStorage.store).Store(out, data);
+
+    __syncthreads();
+#endif
+}
+
+
 //inline __device__ __host__ cudaError_t _cudaMalloc(void** ptr, size_t size) {
 //    printf("Allocate %u\n", static_cast<unsigned int>(size));
 //    return cudaMalloc(ptr, size);
@@ -48,7 +112,7 @@ inline void cuda_assert(
             "CUDA Device Error: %s (File '%s', Line %d)\n",\
             cudaGetErrorString(code), __FILE__, __LINE__\
         );\
-        return;\
+        return cuda_device_abort();\
     }\
 } while (0)
 
@@ -95,6 +159,12 @@ do {\
 
 
 inline __host__ __device__ size_t div_ceil(size_t a, size_t b) {
+    return (a + b - 1) / b;
+}
+
+
+inline constexpr __host__ __device__
+size_t const_div_ceil(size_t a, size_t b) {
     return (a + b - 1) / b;
 }
 
