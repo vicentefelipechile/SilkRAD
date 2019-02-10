@@ -95,7 +95,7 @@ namespace RayTracer {
             //    "Found a leaf! (%u tris)\n",
             //    static_cast<unsigned int>(node.numTris)
             //);
-            node.type = NODETYPE_LEAF;
+            node.type = KDNodeType::LEAF;
             return;
         }
 
@@ -116,7 +116,7 @@ namespace RayTracer {
             /* Split along the x-axis. */
 
             nodeSize.x *= 0.5;
-            node.axis = AXIS_X;
+            node.axis = Axis::X;
             node.pos = node.tmin.x + nodeSize.x;
             rightTMin = node.tmin + make_float3(nodeSize.x, 0.0, 0.0);
 
@@ -134,7 +134,7 @@ namespace RayTracer {
             /* Split along the y-axis. */
 
             nodeSize.y *= 0.5;
-            node.axis = AXIS_Y;
+            node.axis = Axis::Y;
             node.pos = node.tmin.y + nodeSize.y;
             rightTMin = node.tmin + make_float3(0.0, nodeSize.y, 0.0);
 
@@ -147,7 +147,7 @@ namespace RayTracer {
         else {
             /* Split along the z-axis. */
             nodeSize.z *= 0.5;
-            node.axis = AXIS_Z;
+            node.axis = Axis::Z;
             node.pos = node.tmin.z + nodeSize.z;
             rightTMin = node.tmin + make_float3(0.0, 0.0, nodeSize.z);
             //printf(
@@ -179,7 +179,7 @@ namespace RayTracer {
 
             for (int vertex=0; vertex<3; vertex++) {
                 switch (node.axis) {
-                    case AXIS_X:
+                    case Axis::X:
                         if (tri.vertices[vertex].x <= node.pos) {
                             onLeft = true;
                         }
@@ -189,7 +189,7 @@ namespace RayTracer {
 
                         break;
 
-                    case AXIS_Y:
+                    case Axis::Y:
                         if (tri.vertices[vertex].y <= node.pos) {
                             onLeft = true;
                         }
@@ -199,7 +199,7 @@ namespace RayTracer {
 
                         break;
 
-                    case AXIS_Z:
+                    case Axis::Z:
                         if (tri.vertices[vertex].z <= node.pos) {
                             onLeft = true;
                         }
@@ -232,13 +232,13 @@ namespace RayTracer {
             cudaMalloc(&node.children, sizeof(KDNode) * 2)
         );
 
-        node.children[0].type = NODETYPE_NODE;
+        node.children[0].type = KDNodeType::NODE;
         node.children[0].tmin = node.tmin;
         node.children[0].tmax = node.tmin + nodeSize;
         node.children[0].triangleIDs = leftTriIDs;
         node.children[0].numTris = numLeft;
 
-        node.children[1].type = NODETYPE_NODE;
+        node.children[1].type = KDNodeType::NODE;
         node.children[1].tmin = rightTMin;
         node.children[1].tmax = node.tmax;
         node.children[1].triangleIDs = rightTriIDs;
@@ -255,7 +255,7 @@ namespace RayTracer {
 
         CUDA_CHECK_ERROR_DEVICE(cudaFree(node.triangleIDs));
 
-        if (node.type == NODETYPE_NODE) {
+        if (node.type == KDNodeType::NODE) {
             KDNode* children = node.children;
 
             if (threadIdx.x == 0) {
@@ -297,7 +297,7 @@ namespace RayTracer {
     __host__ void CUDARayTracer::build_tree(void) {
         KDNode root;
 
-        root.type = NODETYPE_NODE;
+        root.type = KDNodeType::NODE;
 
         root.tmin = m_tmin;
         root.tmax = m_tmax;
@@ -333,7 +333,7 @@ namespace RayTracer {
 
         CUDA_CHECK_ERROR(cudaFree(root.triangleIDs));
 
-        if (root.type == NODETYPE_NODE) {
+        if (root.type == KDNodeType::NODE) {
             KDNode* children = root.children;
 
             CUDA_CHECK_ERROR(cudaFree(m_pTreeRoot));
@@ -474,7 +474,7 @@ namespace RayTracer {
             float t;
 
             switch (pNode->type) {
-                case NODETYPE_LEAF:
+                case KDNodeType::LEAF:
                     for (size_t ti=0; ti<pNode->numTris; ti++) {
                         Triangle& tri = m_triangles[pNode->triangleIDs[ti]];
 
@@ -494,21 +494,21 @@ namespace RayTracer {
 
                     break;
 
-                case NODETYPE_NODE:
+                case KDNodeType::NODE:
                     bool dirPositive;
 
                     switch (pNode->axis) {
-                        case AXIS_X:
+                        case Axis::X:
                             t = (pNode->pos - start.x) * invDir.x;
                             dirPositive = dir.x >= 0.0;
                             break;
 
-                        case AXIS_Y:
+                        case Axis::Y:
                             t = (pNode->pos - start.y) * invDir.y;
                             dirPositive = dir.y >= 0.0;
                             break;
 
-                        case AXIS_Z:
+                        case Axis::Z:
                             t = (pNode->pos - start.z) * invDir.z;
                             dirPositive = dir.z >= 0.0;
                             break;

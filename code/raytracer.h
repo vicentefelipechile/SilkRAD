@@ -11,8 +11,8 @@ namespace RayTracer {
         float3 vertices[3];
     };
 
-    enum KDNodeType {NODETYPE_NODE, NODETYPE_LEAF};
-    enum Axis {AXIS_X, AXIS_Y, AXIS_Z};
+    enum class KDNodeType {NODE, LEAF};
+    enum class Axis {X, Y, Z};
 
     struct KDNode {
         KDNodeType type;
