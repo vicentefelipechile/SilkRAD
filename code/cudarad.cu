@@ -85,7 +85,8 @@ namespace DirectLighting {
             float3 sampleNormal=make_float3(0.0, 0.0, 0.0)
             ) {
 
-        //samplePos += faceInfo.faceNorm * 1e-3;
+        uint8_t* pvs = CUDABSP::pvs_for_pos(cudaBSP, samplePos);
+        size_t numClusters = cudaBSP.numVisClusters;
 
         float3 result = make_float3(0.0, 0.0, 0.0);
 
@@ -95,6 +96,11 @@ namespace DirectLighting {
                  ) {
 
             BSP::DWorldLight& light = cudaBSP.worldLights[lightIndex];
+
+            if (!CUDABSP::cluster_in_pvs(light.cluster, pvs, numClusters)) {
+                // This light isn't within the sample's PVS. Skip it.
+                continue;
+            }
 
             float3 lightPos = make_float3(
                 light.origin.x,
@@ -158,10 +164,18 @@ namespace DirectLighting {
 
             const float EPSILON = 1e-3;
 
-            // Nudge the sample position towards the light slightly, to avoid
+            // Nudge the sample position "outwards" slightly, to avoid
             // colliding with triangles that directly contain the sample
             // position.
-            samplePos -= dir * EPSILON;
+            float3 nudgeDir;
+            if (len(sampleNormal) > 0.0) {
+                nudgeDir = sampleNormal;
+            }
+            else {
+                nudgeDir = dir * -1.0f;
+            }
+
+            samplePos += nudgeDir * EPSILON;
 
             bool lightBlocked = CUDARAD::g_pDeviceRayTracer->LOS_blocked(
                 lightPos, samplePos
@@ -319,8 +333,8 @@ namespace AA {
         );
     }
 
-    static __device__ const float MIN_AA_GRADIENT = 0.125;      // 1/8
-    //static __device__ const float MIN_AA_GRADIENT = 0.0625;    // 1/16
+    //static __device__ const float MIN_AA_GRADIENT = 0.125;      // 1/8
+    static __device__ const float MIN_AA_GRADIENT = 0.0625;    // 1/16
 
     __global__ void map_face_samples(
             CUDABSP::CUDABSP* pCudaBSP,

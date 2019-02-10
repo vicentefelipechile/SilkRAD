@@ -64,6 +64,18 @@ int main(int argc, char** argv) {
         return 1;
     }
 
+    if (!pBSP->has_visibility_data()) {
+        std::cerr
+            << "ERROR: BSP file " << filename << " has no visibility matrix!"
+                << std::endl
+            << "SilkRAD does not support BSPs without visibility data."
+                << std::endl
+            << "Please run VIS on the map before continuing. "
+            << "If you are positive that VIS was performed on this map, "
+            << "check for leaks." << std::endl;
+        return 1;
+    }
+
     /*
      * HACK!
      * Disable normal maps throughout the entire BSP, because I didn't
@@ -92,19 +104,19 @@ int main(int argc, char** argv) {
     std::cout << "Compute direct lighting..." << std::endl;
     CUDARAD::compute_direct_lighting(*pBSP, pCudaBSP);
 
-    std::cout << "Run lightmap FXAA passes..." << std::endl;
-    const size_t NUM_FXAA_PASSES = 5;
-    for (size_t i = 0; i<NUM_FXAA_PASSES; i++) {
-        std::cout << "    Pass "
-            << i + 1 << "/" << NUM_FXAA_PASSES << "..."
-            << std::endl;
+    //std::cout << "Run lightmap FXAA passes..." << std::endl;
+    //const size_t NUM_FXAA_PASSES = 5;
+    //for (size_t i = 0; i<NUM_FXAA_PASSES; i++) {
+    //    std::cout << "    Pass "
+    //        << i + 1 << "/" << NUM_FXAA_PASSES << "..."
+    //        << std::endl;
 
-        CUDAFXAA::antialias_lightsamples(pCudaBSP);
-    }
-    std::cout << "Done!" << std::endl;
+    //    CUDAFXAA::antialias_lightsamples(pCudaBSP);
+    //}
+    //std::cout << "Done!" << std::endl;
 
-    //std::cout << "Run direct lighting antialiasing pass..." << std::endl;
-    //CUDARAD::antialias_direct_lighting(*pBSP, pCudaBSP);
+    std::cout << "Run direct lighting antialiasing pass..." << std::endl;
+    CUDARAD::antialias_direct_lighting(*pBSP, pCudaBSP);
 
     //std::cout << "Compute light bounces..." << std::endl;
     //CUDARAD::bounce_lighting(*pBSP, pCudaBSP);

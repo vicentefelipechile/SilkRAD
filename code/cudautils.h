@@ -9,7 +9,7 @@
 #include "device_launch_parameters.h"
 
 
-static inline void cuda_assert(
+inline void cuda_assert(
         cudaError_t code, const char* file, int line,
         bool abort=true
         ) {
@@ -28,7 +28,7 @@ static inline void cuda_assert(
 }
 
 
-//static inline __device__ __host__ cudaError_t _cudaMalloc(void** ptr, size_t size) {
+//inline __device__ __host__ cudaError_t _cudaMalloc(void** ptr, size_t size) {
 //    printf("Allocate %u\n", static_cast<unsigned int>(size));
 //    return cudaMalloc(ptr, size);
 //}
@@ -94,13 +94,13 @@ do {\
 } while (0)
 
 
-static __host__ __device__ inline size_t div_ceil(size_t a, size_t b) {
+inline __host__ __device__ size_t div_ceil(size_t a, size_t b) {
     return (a + b - 1) / b;
 }
 
 
 /** Hack to get the Windows WDDM thingy to work properly. */
-static __host__ inline void flush_wddm_queue(void) {
+inline __host__ void flush_wddm_queue(void) {
     cudaEvent_t event;
 
     CUDA_CHECK_ERROR(cudaEventCreate(&event));
@@ -113,12 +113,17 @@ static __host__ inline void flush_wddm_queue(void) {
 }
 
 
-static __host__ __device__ inline float dot(const float3& a, const float3& b) {
+inline __host__ __device__ float3 make_float3(const BSP::Vec3<float>& f) {
+    return make_float3(f.x, f.y, f.z);
+}
+
+
+inline __host__ __device__ float dot(const float3& a, const float3& b) {
     return a.x * b.x + a.y * b.y + a.z * b.z;
 }
 
 
-static __host__ __device__ inline float3 cross(const float3& a, const float3& b) {
+inline __host__ __device__ float3 cross(const float3& a, const float3& b) {
     return make_float3(
         a.y * b.z - a.z * b.y,
         a.z * b.x - a.x * b.z,
@@ -127,21 +132,21 @@ static __host__ __device__ inline float3 cross(const float3& a, const float3& b)
 }
 
 
-static __host__ __device__ inline float3 operator-(
+inline __host__ __device__ float3 operator-(
         const float3& a, const float3& b
         ) {
     return make_float3(a.x - b.x, a.y - b.y, a.z - b.z);
 }
 
 
-static __host__ __device__ inline float3 operator+(
+inline __host__ __device__ float3 operator+(
         const float3& a, const float3& b
         ) {
     return make_float3(a.x + b.x, a.y + b.y, a.z + b.z);
 }
 
 
-static __host__ __device__ inline float3& operator+=(
+inline __host__ __device__ float3& operator+=(
         float3& a, const float3& b
         ) {
     a.x += b.x;
@@ -151,7 +156,7 @@ static __host__ __device__ inline float3& operator+=(
 }
 
 
-static __host__ __device__ inline float3& operator-=(
+inline __host__ __device__ float3& operator-=(
         float3& a, const float3& b
         ) {
     a.x -= b.x;
@@ -161,12 +166,12 @@ static __host__ __device__ inline float3& operator-=(
 }
 
 
-static __host__ __device__ inline float3 operator*(const float3& v, float c) {
+inline __host__ __device__ float3 operator*(const float3& v, float c) {
     return make_float3(v.x * c, v.y * c, v.z * c);
 }
 
 
-static __host__ __device__ inline float3 operator*=(float3& a, float c) {
+inline __host__ __device__ float3 operator*=(float3& a, float c) {
     a.x *= c;
     a.y *= c;
     a.z *= c;
@@ -174,17 +179,17 @@ static __host__ __device__ inline float3 operator*=(float3& a, float c) {
 }
 
 
-static __host__ __device__ inline float3 operator*(float c, const float3& v) {
+inline __host__ __device__ float3 operator*(float c, const float3& v) {
     return v * c;
 }
 
 
-static __host__ __device__ inline float3 operator/(const float3& v, float c) {
+inline __host__ __device__ float3 operator/(const float3& v, float c) {
     return v * (1.0 / c);
 }
 
 
-static __host__ __device__ inline float3 operator/=(float3& a, float c) {
+inline __host__ __device__ float3 operator/=(float3& a, float c) {
     a.x /= c;
     a.y /= c;
     a.z /= c;
@@ -192,18 +197,18 @@ static __host__ __device__ inline float3 operator/=(float3& a, float c) {
 }
 
 
-static __host__ __device__ inline float dist(const float3& a, const float3& b) {
+inline __host__ __device__ float dist(const float3& a, const float3& b) {
     float3 diff = b - a;
     return sqrt(dot(diff, diff));
 }
 
 
-static __host__ __device__ inline float len(const float3& v) {
+inline __host__ __device__ float len(const float3& v) {
     return dist(make_float3(0.0, 0.0, 0.0), v);
 }
 
 
-static __host__ __device__ inline float3 normalized(const float3& v) {
+inline __host__ __device__ float3 normalized(const float3& v) {
     return v / len(v);
 }
 

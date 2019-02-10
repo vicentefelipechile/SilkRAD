@@ -19,6 +19,7 @@
 #include <gmtl/MatrixOps.h>
 
 #include "bsp.h"
+#include "bsp_shared.h"
 
 
 namespace BSP {
@@ -105,6 +106,7 @@ namespace BSP {
             }
         }
 
+        load_lump(file, LUMP_NODES, m_nodes);
         load_lump(file, LUMP_LEAVES, m_leaves);
 
         if (!is_fullbright()) {
@@ -132,6 +134,7 @@ namespace BSP {
             load_lump(file, LUMP_WORLDLIGHTS_HDR, m_worldLights);
         }
 
+        load_visibility(file);
         load_gamelumps(file);
 
         load_extras(file);
@@ -170,7 +173,46 @@ namespace BSP {
 
             if (classname == "light"
                     || classname == "light_spot") {
-                m_lights.push_back(Light(entity));
+                m_lights.push_back(Light(*this, entity));
+            }
+        }
+    }
+
+    void BSP::load_visibility(std::ifstream& file) {
+        load_lump(file, LUMP_VISIBILITY, m_visLumpData);
+
+        if (m_visLumpData.size() < sizeof(DVis)) {
+            // There is no visibility data available. Welp.
+            return;
+        }
+
+        DVis& visLump = *reinterpret_cast<DVis*>(m_visLumpData.data());
+        int32_t numClusters = visLump.numClusters;
+
+        int32_t (*byteOffsetPairs)[2] = &visLump.firstByteOffsetPair;
+
+        m_visibility.resize(numClusters);
+
+        /* Decompress the visibility matrix */
+        for (int cluster1=0; cluster1<numClusters; cluster1++) {
+            int32_t pvsOffset = byteOffsetPairs[cluster1][0];
+            std::vector<uint8_t>& clusterVis = m_visibility[cluster1];
+
+            int cluster2 = 0;
+            while (cluster2 < numClusters) {
+                uint8_t pvsByte = m_visLumpData[pvsOffset++];
+
+                if (pvsByte == 0) {
+                    uint8_t skipCount = m_visLumpData[pvsOffset++];
+                    for (uint8_t i=0; i<skipCount; i++) {
+                        clusterVis.push_back(0);
+                        cluster2 += 8;
+                    }
+                }
+                else {
+                    clusterVis.push_back(pvsByte);
+                    cluster2 += 8;
+                }
             }
         }
     }
@@ -314,6 +356,10 @@ namespace BSP {
         return m_faces;
     }
 
+    const std::vector<DNode>& BSP::get_nodes(void) const {
+        return m_nodes;
+    }
+
     const std::vector<DLeaf>& BSP::get_leaves(void) const {
         return m_leaves;
     }
@@ -348,12 +394,24 @@ namespace BSP {
         return m_entData;
     }
 
+    const BSP::VisMatrix& BSP::get_visibility(void) const {
+        return m_visibility;
+    }
+
+    int16_t BSP::cluster_for_pos(const Vec3<float>& pos) const {
+        return BSPShared::cluster_for_pos(*this, pos);
+    }
+
     bool BSP::is_fullbright(void) const {
         return m_fullbright;
     }
 
     void BSP::set_fullbright(bool fullbright) {
         m_fullbright = fullbright;
+    }
+
+    bool BSP::has_visibility_data(void) const {
+        return get_visibility().size() > 0;
     }
 
     void BSP::write(const std::string& filename) {
@@ -453,6 +511,11 @@ namespace BSP {
         //save_faces(file, offsets, sizes);
 
         save_lump(
+            file, LUMP_NODES, m_nodes,
+            offsets, sizes
+        );
+
+        save_lump(
             file, LUMP_LEAVES, m_leaves,
             offsets, sizes
         );
@@ -516,6 +579,7 @@ namespace BSP {
             //);
         }
 
+        save_visibility(file, offsets, sizes);
         save_gamelumps(file, offsets, sizes);
 
         save_extras(file, offsets, sizes);
@@ -642,6 +706,17 @@ namespace BSP {
             file, LUMP_WORLDLIGHTS_HDR, m_worldLights,
             offsets, sizes
         );
+    }
+
+    void BSP::save_visibility(
+            std::ofstream& file,
+            std::unordered_map<int, std::ofstream::off_type>& offsets,
+            std::unordered_map<int, size_t>& sizes
+            ) {
+
+        // Since we just keep the original visibility lump data around,
+        // this is really easy.
+        save_lump(file, LUMP_VISIBILITY, m_visLumpData, offsets, sizes);
     }
 
     void BSP::save_extras(
@@ -1233,8 +1308,9 @@ namespace BSP {
         return pow(linear / 255.0, INV_GAMMA) * 255.0;
     }
 
-    Light::Light(const Entity& entity) :
+    Light::Light(const BSP& bsp, const Entity& entity) :
             m_coords(vec3_from_str(entity.get("origin"))),
+            m_cluster(bsp.cluster_for_pos(m_coords)),
             direction(Vec3<double> {1.0, 0.0, 0.0}) {
 
         /* Parse color */
@@ -1336,7 +1412,7 @@ namespace BSP {
                 static_cast<float>(direction.y),
                 static_cast<float>(direction.z),
             },
-            0,
+            m_cluster,
             emitType,
             0x0,
             stopdot,
