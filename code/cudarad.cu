@@ -586,7 +586,7 @@ namespace AA {
                 if (gradient < MIN_AA_GRADIENT) {
                     //results[sampleIndex] = sampleColor;
                     continue;
-                }
+        }
 
                 ///*
                 // * Box blur!
@@ -631,7 +631,7 @@ namespace AA {
                 //color /= 9.0;
 
                 /* Perform supersampling at this point. */
-                const size_t SUPERSAMPLE_WIDTH = 4;
+        const size_t SUPERSAMPLE_WIDTH = 4;
 
                 float sStep = 2.0 / static_cast<float>(SUPERSAMPLE_WIDTH);
                 float tStep = 2.0 / static_cast<float>(SUPERSAMPLE_WIDTH);
@@ -645,11 +645,11 @@ namespace AA {
                         float sOffset = sStep * ssj - 1.0;
 
                         color += DirectLighting::sample_at(
-                            *pCudaBSP, faceInfo,
-                            s + sOffset, t + tOffset
-                        );
+                *pCudaBSP, faceInfo,
+                s + sOffset, t + tOffset
+            );
                     }
-                }
+        }
 
                 color /= SUPERSAMPLE_WIDTH * SUPERSAMPLE_WIDTH;
 

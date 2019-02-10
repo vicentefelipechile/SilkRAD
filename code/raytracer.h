@@ -31,13 +31,13 @@ namespace RayTracer {
     //class KDTree {
     //    private:
     //        KDNode* m_root;
-    //        
+    //
     //    public:
     //        KDTree();
     //};
 
     /**
-     * Ray-trace acceleration structure whose data resides solely in device 
+     * Ray-trace acceleration structure whose data resides solely in device
      * memory.
      */
     class CUDARayTracer {
@@ -55,7 +55,7 @@ namespace RayTracer {
 
             __host__ void build_tree(void);
             __host__ void destroy_tree(void);
-            
+
         public:
             CUDARayTracer();
             CUDARayTracer(const CUDARayTracer& other) = delete;
