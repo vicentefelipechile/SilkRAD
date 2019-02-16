@@ -39,13 +39,16 @@ inline __device__ void cuda_device_abort(void) {
 }
 
 
-template <
-    typename T, size_t count,
-    size_t BLOCK_WIDTH, size_t BLOCK_HEIGHT,
-    size_t ITEMS_PER_THREAD
->
-inline __device__ void prefix_sum(T (&in)[count], T (&out)[count]) {
+template <typename T, size_t COUNT, size_t BLOCK_WIDTH, size_t BLOCK_HEIGHT>
+inline __device__ void prefix_sum(T (&in)[COUNT], T (&out)[COUNT]) {
+    static_assert(
+        COUNT % (BLOCK_WIDTH * BLOCK_HEIGHT) == 0,
+        "prefix_sum() element count must be divisible by thread count!"
+    );
+
 #ifdef __CUDACC__
+    const size_t ITEMS_PER_THREAD = COUNT / (BLOCK_WIDTH * BLOCK_HEIGHT);
+
     using Loader = cub::BlockLoad<
         T,
         BLOCK_WIDTH,
@@ -88,6 +91,65 @@ inline __device__ void prefix_sum(T (&in)[count], T (&out)[count]) {
     Storer(tempStorage.store).Store(out, data);
 
     __syncthreads();
+#endif
+}
+
+
+/** Block-wide filter algorithm. */
+template <
+    typename T,
+    size_t COUNT,
+    size_t BLOCK_WIDTH, size_t BLOCK_HEIGHT,
+    typename F
+>
+inline __device__ size_t filter(F predicate, T (&in)[COUNT], T (&out)[COUNT]) {
+    static_assert(
+        COUNT % (BLOCK_WIDTH * BLOCK_HEIGHT) == 0,
+        "filter() element count must be divisible by thread count!"
+    );
+
+#ifdef __CUDACC__
+    size_t threadID = threadIdx.y * BLOCK_WIDTH + threadIdx.x;
+    const size_t THREADS_PER_BLOCK = BLOCK_WIDTH * BLOCK_HEIGHT;
+
+    __shared__ uint32_t selected[COUNT];
+
+    /* Select all elements that match the predicate. */
+    for (size_t i=threadID; i<COUNT; i+=THREADS_PER_BLOCK) {
+        if (i >= COUNT) {
+            continue;
+        }
+
+        selected[i] = (predicate(in[i])) ? 1 : 0;
+    }
+
+    __syncthreads();
+
+    __shared__ uint32_t scanned[COUNT];
+
+    /* Parallel prefix sum voodoo magic. */
+    prefix_sum<T, COUNT, BLOCK_WIDTH, BLOCK_HEIGHT>(selected, scanned);
+
+    __syncthreads();
+
+    /* Gather all elements. */
+    for (size_t i=threadID; i<COUNT; i+=THREADS_PER_BLOCK) {
+        if (i >= COUNT) {
+            continue;
+        }
+
+        if (selected[i]) {
+            size_t finalIndex = scanned[i];
+            out[finalIndex] = in[i];
+        }
+    }
+
+    __syncthreads();
+
+    // Return the number of elements that matched the predicate.
+    return scanned[COUNT - 1] + selected[COUNT - 1];
+#else
+    return 0;
 #endif
 }
 
@@ -183,6 +245,16 @@ inline __host__ void flush_wddm_queue(void) {
 }
 
 
+inline __host__ __device__ float3 make_float3(float f) {
+    return make_float3(f, f, f);
+}
+
+
+inline __host__ __device__ float3 make_float3(void) {
+    return make_float3(0.0f);
+}
+
+
 inline __host__ __device__ float3 make_float3(const BSP::Vec3<float>& f) {
     return make_float3(f.x, f.y, f.z);
 }
@@ -255,7 +327,7 @@ inline __host__ __device__ float3 operator*(float c, const float3& v) {
 
 
 inline __host__ __device__ float3 operator/(const float3& v, float c) {
-    return v * (1.0 / c);
+    return v * (1.0f / c);
 }
 
 
@@ -274,7 +346,7 @@ inline __host__ __device__ float dist(const float3& a, const float3& b) {
 
 
 inline __host__ __device__ float len(const float3& v) {
-    return dist(make_float3(0.0, 0.0, 0.0), v);
+    return dist(make_float3(), v);
 }
 
 

@@ -9,7 +9,7 @@
 
 static __device__ inline float luma_from_rgb(float3 rgb) {
     //return sqrt(dot(rgb / 255.0, make_float3(0.299, 0.587, 0.114)));
-    return sqrt(dot(rgb / 255.0, make_float3(1.0, 1.0, 1.0)));
+    return sqrt(dot(rgb / 255.0f, make_float3(1.0f)));
 }
 
 
@@ -24,13 +24,13 @@ static __device__ float3 sample(
         float s, float t
         ) {
 
-    if (0.0 <= s && s < width) {
-        if (0.0 <= t && t < height) {
+    if (0.0f <= s && s < width) {
+        if (0.0f <= t && t < height) {
             return samplesIn[static_cast<size_t>(t * width + s)];
         }
     }
 
-    // If we're not in bounds, we have no choice but to take another light 
+    // If we're not in bounds, we have no choice but to take another light
     // sample.
     return DirectLighting::sample_at(cudaBSP, faceInfo, s, t);
 }
@@ -42,12 +42,10 @@ static __device__ float3 subsample(
         float s, float t
         ) {
 
-    //float3 zero = make_float3(0.0, 0.0, 0.0);
-
     const float EPSILON = 1e-3;
 
-    s = fminf(fmaxf(0.0, s), width - EPSILON);
-    t = fminf(fmaxf(0.0, t), height - EPSILON);
+    s = fminf(fmaxf(0.0f, s), width - EPSILON);
+    t = fminf(fmaxf(0.0f, t), height - EPSILON);
 
     int s0 = static_cast<int>(floorf(s));
     int t0 = static_cast<int>(floorf(t));
@@ -55,10 +53,10 @@ static __device__ float3 subsample(
     int t1 = t0 + 1;
 
     float rWeight = s - floorf(s);
-    float lWeight = 1.0 - rWeight;
+    float lWeight = 1.0f - rWeight;
 
     float dWeight = t - floorf(t);
-    float uWeight = 1.0 - dWeight;
+    float uWeight = 1.0f - dWeight;
 
     auto get_sample = [&] (float s, float t) -> float3 {
         return sample(cudaBSP, faceInfo, samplesIn, width, height, s, t);
@@ -169,15 +167,15 @@ __global__ void map_samples_fxaa(
 
     /* Estimate horizontal and vertical gradients. */
     float gradientHoriz = (
-        fabsf(-2.0 * lumaLeft + lumaULDL)
-        + fabsf(-2.0 * lumaCenter + lumaUD) * 2.0
-        + fabsf(-2.0 * lumaRight + lumaURDR)
+        fabsf(-2.0f * lumaLeft + lumaULDL)
+        + fabsf(-2.0f * lumaCenter + lumaUD) * 2.0f
+        + fabsf(-2.0f * lumaRight + lumaURDR)
     );
 
     float gradientVerti = (
-        fabsf(-2.0 * lumaUp + lumaULUR)
-        + fabsf(-2.0 * lumaCenter + lumaLR) * 2.0
-        + fabsf(-2.0 * lumaDown + lumaDLDR)
+        fabsf(-2.0f * lumaUp + lumaULUR)
+        + fabsf(-2.0f * lumaCenter + lumaLR) * 2.0f
+        + fabsf(-2.0f * lumaDown + lumaDLDR)
     );
 
     /* Are we at a horizontal or vertical edge? */
@@ -203,16 +201,16 @@ __global__ void map_samples_fxaa(
     bool grad1Steeper = fabsf(gradient1) >= fabsf(gradient2);
 
     /* Normalize the gradients. */
-    float gradientNorm = 0.25 * fmaxf(fabsf(gradient1), fabsf(gradient2));
+    float gradientNorm = 0.25f * fmaxf(fabsf(gradient1), fabsf(gradient2));
 
     /* Determine directional luma average. */
     float lumaLocalAvg;
 
     if (grad1Steeper) {
-        lumaLocalAvg = 0.5 * (luma1 + lumaCenter);
+        lumaLocalAvg = 0.5f * (luma1 + lumaCenter);
     }
     else {
-        lumaLocalAvg = 0.5 * (luma2 + lumaCenter);
+        lumaLocalAvg = 0.5f * (luma2 + lumaCenter);
     }
 
     /* Subsample locations for each iteration. */
@@ -223,14 +221,14 @@ __global__ void map_samples_fxaa(
 
     /* Offset our sample locations toward the edge by half a pixel. */
     if (isHoriz) {
-        iteration1T += grad1Steeper ? -0.5 : 0.5;
-        iteration2T += grad1Steeper ? -0.5 : 0.5;
+        iteration1T += grad1Steeper ? -0.5f : 0.5f;
+        iteration2T += grad1Steeper ? -0.5f : 0.5f;
     }
     else {
-        iteration1S += grad1Steeper ? -0.5 : 0.5;
-        iteration2S += grad1Steeper ? -0.5 : 0.5;
+        iteration1S += grad1Steeper ? -0.5f : 0.5f;
+        iteration2S += grad1Steeper ? -0.5f : 0.5f;
     }
-    
+
     /* Determine iteration offsets. */
     size_t offsetS = isHoriz ? 1 : 0;
     size_t offsetT = isHoriz ? 0 : 1;
@@ -263,8 +261,8 @@ __global__ void map_samples_fxaa(
         }
 
         /* Did we reach the end of the edge? */
-        reached1 = lumaDiff1 < 0.0 && (fabsf(lumaDiff1) >= gradientNorm);
-        reached2 = lumaDiff2 < 0.0 && (fabsf(lumaDiff2) >= gradientNorm);
+        reached1 = lumaDiff1 < 0.0f && (fabsf(lumaDiff1) >= gradientNorm);
+        reached2 = lumaDiff2 < 0.0f && (fabsf(lumaDiff2) >= gradientNorm);
 
         /* If we've reached the end, stop iteration. */
         if (reached1 && reached2) {
@@ -295,17 +293,17 @@ __global__ void map_samples_fxaa(
     float edgeLen = dist1 + dist2;
 
     /*
-     * The pixel offset where we should subsample, in the direction of the 
+     * The pixel offset where we should subsample, in the direction of the
      * closer edge endpoint.
      */
     float pixelOffset;
 
     if ((lumaCenter < lumaLocalAvg)
-            != ((dir1Closer ? lumaEnd1 : lumaEnd2) < 0.0)) {
-        pixelOffset = 0.0;
+            != ((dir1Closer ? lumaEnd1 : lumaEnd2) < 0.0f)) {
+        pixelOffset = 0.0f;
     }
     else {
-        pixelOffset = -closerDist / edgeLen + 0.5;
+        pixelOffset = -closerDist / edgeLen + 0.5f;
     }
 
     //printf(
@@ -475,7 +473,7 @@ namespace CUDAFXAA {
                 cudaMemcpyDeviceToHost
             )
         );
-        
+
         /*
          * Allocate an array of FaceInfo structures, which will be needed for
          * each round of FXAA.

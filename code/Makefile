@@ -5,7 +5,10 @@ bsp.o: bsp.cpp bsp.h
 	nvcc -m64 bsp.cpp -O3 -I ./include -std=c++11 -c -g -arch=compute_35 -rdc=true
 
 bsp_mingw.o: bsp.cpp bsp.h
-	g++ bsp.cpp -I ./include -Wall -Wextra -Wfatal-errors -std=c++11 -o bsp_mingw.o -c -g
+	g++ bsp.cpp -I ./include -I "$(CUDA_PATH)/include" -Wall -Wextra -Wfatal-errors -Wno-unknown-pragmas -std=c++11 -o bsp_mingw.o -c -g
+
+bsp_shared_mingw.o:
+	g++ bsp_shared.cpp -I ./include -I "$(CUDA_PATH)/include" -Wall -Wextra -Wfatal-errors -Wno-unknown-pragmas -std=c++11 -o bsp_shared_mingw.o -c -g
 
 silkrad.o: silkrad.cpp bsp.h
 	nvcc -m64 silkrad.cpp -O3 -I ./include -std=c++11 -c -g -arch=compute_35 -rdc=true
@@ -28,8 +31,8 @@ comparelumps: comparelumps.o bsp.o
 examinebsp.o: examinebsp.cpp bsp.h
 	g++ examinebsp.cpp -I ./include -Wall -Wextra -Wfatal-errors -std=c++11 -c -g
 
-examinebsp: examinebsp.o bsp_mingw.o
-	g++ examinebsp.o bsp_mingw.o -Wall -Wextra -Wfatal-errors -std=c++11 -o examinebsp -g
+examinebsp: examinebsp.o bsp_mingw.o bsp_shared_mingw.o
+	g++ examinebsp.o bsp_mingw.o bsp_shared_mingw.o -Wall -Wextra -Wfatal-errors -std=c++11 -o examinebsp -g
 
 clean:
 	-rm -f *.o

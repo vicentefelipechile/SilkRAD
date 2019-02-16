@@ -81,17 +81,19 @@
 
 namespace CUDABSP {
     __device__ BSP::RGBExp32 rgbexp32_from_float3(float3 color) {
-        if ((1e-3 <= color.x && color.x < 1.0)
-                || (1e-3 <= color.y && color.y < 1.0)
-                || (1e-3 <= color.z && color.z < 1.0)) {
+        const float EPSILON = 1e-3f;
+
+        if ((EPSILON <= color.x && color.x < 1.0f)
+                && (EPSILON <= color.y && color.y < 1.0f)
+                && (EPSILON <= color.z && color.z < 1.0f)) {
 
             int8_t exp = 0;
 
-            while ((1e-3 <= color.x && color.x < 1.0)
-                   || (1e-3 <= color.y && color.y < 1.0)
-                   || (1e-3 <= color.z && color.z < 1.0)) {
+            while ((EPSILON <= color.x && color.x < 1.0f)
+                   || (EPSILON <= color.y && color.y < 1.0f)
+                   || (EPSILON <= color.z && color.z < 1.0f)) {
 
-                color *= 2.0;
+                color *= 2.0f;
                 exp--;
             }
 
@@ -153,14 +155,10 @@ namespace CUDABSP {
             int16_t cluster, uint8_t* pvs, size_t numClusters
             ) {
 
-        if (pvs == nullptr) {
+        if (pvs == nullptr || static_cast<size_t>(cluster) >= numClusters) {
             // If we don't have a valid PVS, assume we're outside the world
             // and therefore can see everything.
             return true;
-        }
-
-        if (static_cast<size_t>(cluster) >= numClusters) {
-            return false;
         }
 
         size_t byteIndex = cluster / 8;

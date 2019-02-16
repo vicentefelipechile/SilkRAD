@@ -810,9 +810,9 @@ namespace BSP {
     }
 
     void BSP::init_ambient_samples(void) {
-        const float SAMPLE_SPACING_X = 128.0;
-        const float SAMPLE_SPACING_Y = 128.0;
-        const float SAMPLE_SPACING_Z = 256.0;
+        const float SAMPLE_SPACING_X = 128.0f;
+        const float SAMPLE_SPACING_Y = 128.0f;
+        const float SAMPLE_SPACING_Z = 256.0f;
 
         m_ambientLightIndices.clear();
         m_ambientLightSamples.clear();
@@ -824,9 +824,9 @@ namespace BSP {
             }
 
             Vec3<float> leafSize {
-                leaf.maxs[0] - leaf.mins[0],
-                leaf.maxs[1] - leaf.mins[1],
-                leaf.maxs[2] - leaf.mins[2],
+                static_cast<float>(leaf.maxs[0] - leaf.mins[0]),
+                static_cast<float>(leaf.maxs[1] - leaf.mins[1]),
+                static_cast<float>(leaf.maxs[2] - leaf.mins[2]),
             };
 
             size_t numSamplesX = static_cast<size_t>(
@@ -850,20 +850,20 @@ namespace BSP {
 
             for (size_t i=0; i<numSamplesZ; i++) {
                 uint8_t z = static_cast<uint8_t>(
-                    (static_cast<float>(i) + 0.5)
-                    / static_cast<float>(numSamplesZ) * 255.0
+                    (static_cast<float>(i) + 0.5f)
+                    / static_cast<float>(numSamplesZ) * 255.0f
                 );
 
                 for (size_t j=0; j<numSamplesY; j++) {
                     uint8_t y = static_cast<uint8_t>(
-                        (static_cast<float>(j) + 0.5)
-                        / static_cast<float>(numSamplesY) * 255.0
+                        (static_cast<float>(j) + 0.5f)
+                        / static_cast<float>(numSamplesY) * 255.0f
                     );
 
                     for (size_t k=0; k<numSamplesX; k++) {
                         uint8_t x = static_cast<uint8_t>(
-                            (static_cast<float>(k) + 0.5)
-                            / static_cast<float>(numSamplesX) * 255.0
+                            (static_cast<float>(k) + 0.5f)
+                            / static_cast<float>(numSamplesX) * 255.0f
                         );
 
                         m_ambientLightSamples.push_back(
@@ -1388,12 +1388,12 @@ namespace BSP {
 
     DWorldLight Light::to_worldlight(void) const {
         float stopdot = (emitType == EMIT_SPOTLIGHT) ?
-            cos(radians(innerCone)) :
-            0.0;
+            static_cast<float>(cos(radians(innerCone))) :
+            0.0f;
 
         float stopdot2 = (emitType == EMIT_SPOTLIGHT) ?
-            cos(radians(outerCone)) :
-            0.0;
+            static_cast<float>(cos(radians(outerCone))) :
+            0.0f;
 
         //std::cout << " Normal: <"
         //    << direction.x << ", "
@@ -1417,11 +1417,11 @@ namespace BSP {
             0x0,
             stopdot,
             stopdot2,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            1.0,
+            0.0f,
+            0.0f,
+            0.0f,
+            0.0f,
+            1.0f,
             0x0,
             0,
             0,

@@ -15,7 +15,7 @@ namespace RayTracer {
             const float3& startPos, const float3& endPos
             ) {
 
-        const float EPSILON = 1e-6;
+        const float EPSILON = 1e-6f;
 
         float3 diff = endPos - startPos;
         float dist = len(diff);
@@ -35,7 +35,7 @@ namespace RayTracer {
         float3 tVec = startPos - vertex1;
 
         float u = dot(tVec, pVec);
-        if (u < 0.0 || u > det) {
+        if (u < 0.0f || u > det) {
             return false;
         }
 
@@ -43,13 +43,13 @@ namespace RayTracer {
 
         float v = dot(dir, qVec);
 
-        if (v < 0.0 || u + v > det) {
+        if (v < 0.0f || u + v > det) {
             return false;
         }
 
         float t = dot(edge2, qVec) / det;
 
-        return (0.0 < t && t < dist);
+        return (0.0f < t && t < dist);
     }
 
     /**
@@ -63,9 +63,9 @@ namespace RayTracer {
             return;
         }
 
-        Triangle& tri = triangles[index];
+        const float EPSILON = 1e-3f;
 
-        const float EPSILON = 1e-3;
+        Triangle& tri = triangles[index];
 
         float3& vertex1 = tri.vertices[0];
         float3& vertex2 = tri.vertices[1];
@@ -118,7 +118,7 @@ namespace RayTracer {
             nodeSize.x *= 0.5;
             node.axis = Axis::X;
             node.pos = node.tmin.x + nodeSize.x;
-            rightTMin = node.tmin + make_float3(nodeSize.x, 0.0, 0.0);
+            rightTMin = node.tmin + make_float3(nodeSize.x, 0.0f, 0.0f);
 
             //printf(
             //    "(%u) Split at x = %f\n",
@@ -136,7 +136,7 @@ namespace RayTracer {
             nodeSize.y *= 0.5;
             node.axis = Axis::Y;
             node.pos = node.tmin.y + nodeSize.y;
-            rightTMin = node.tmin + make_float3(0.0, nodeSize.y, 0.0);
+            rightTMin = node.tmin + make_float3(0.0f, nodeSize.y, 0.0f);
 
             //printf(
             //    "(%u) Split at y = %f\n",
@@ -149,7 +149,7 @@ namespace RayTracer {
             nodeSize.z *= 0.5;
             node.axis = Axis::Z;
             node.pos = node.tmin.z + nodeSize.z;
-            rightTMin = node.tmin + make_float3(0.0, 0.0, nodeSize.z);
+            rightTMin = node.tmin + make_float3(0.0f, 0.0f, nodeSize.z);
             //printf(
             //    "(%u) Split at z = %f\n",
             //    static_cast<unsigned int>(depth),
@@ -281,8 +281,8 @@ namespace RayTracer {
             m_triangleIDs(nullptr),
             m_numTriangles(0),
             m_pTreeRoot(nullptr),
-            m_tmin(make_float3(0.0, 0.0, 0.0)),
-            m_tmax(make_float3(0.0, 0.0, 0.0)) {}
+            m_tmin(make_float3()),
+            m_tmax(make_float3()) {}
 
     CUDARayTracer::~CUDARayTracer() {
         if (m_triangles != nullptr) {
@@ -431,13 +431,13 @@ namespace RayTracer {
             const float3& startPos, const float3& endPos
             ) {
 
-        const float EPSILON = 1e-6;
+        const float EPSILON = 1e-6f;
 
         float3 dir = normalized(endPos - startPos);
         float3 invDir = make_float3(
-            1.0 / (dir.x + ((dir.x < 0) ? -EPSILON : EPSILON)),
-            1.0 / (dir.y + ((dir.y < 0) ? -EPSILON : EPSILON)),
-            1.0 / (dir.z + ((dir.z < 0) ? -EPSILON : EPSILON))
+            1.0f / (dir.x + ((dir.x < 0) ? -EPSILON : EPSILON)),
+            1.0f / (dir.y + ((dir.y < 0) ? -EPSILON : EPSILON)),
+            1.0f / (dir.z + ((dir.z < 0) ? -EPSILON : EPSILON))
         );
 
         struct StackEntry {
@@ -500,17 +500,17 @@ namespace RayTracer {
                     switch (pNode->axis) {
                         case Axis::X:
                             t = (pNode->pos - start.x) * invDir.x;
-                            dirPositive = dir.x >= 0.0;
+                            dirPositive = dir.x >= 0.0f;
                             break;
 
                         case Axis::Y:
                             t = (pNode->pos - start.y) * invDir.y;
-                            dirPositive = dir.y >= 0.0;
+                            dirPositive = dir.y >= 0.0f;
                             break;
 
                         case Axis::Z:
                             t = (pNode->pos - start.z) * invDir.z;
-                            dirPositive = dir.z >= 0.0;
+                            dirPositive = dir.z >= 0.0f;
                             break;
                     }
 

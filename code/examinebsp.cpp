@@ -34,6 +34,44 @@ int main(int argc, char** argv) {
     std::cout << "BSP Version " << pBSP->get_format_version() << std::endl;
     std::cout << "Fullbright: " << pBSP->is_fullbright() << std::endl;
     
+    const std::vector<BSP::DLeafAmbientLighting>& ambientLighting =
+        pBSP->get_ambient_samples();
+    
+    int leafIndex = 0;
+    for (const BSP::DLeafAmbientIndex& index : pBSP->get_ambient_indices()) {
+        std::cout << "Leaf " << leafIndex
+            << " (" << index.ambientSampleCount << " ambient samples):"
+            << std::endl;
+            
+        int start = index.firstAmbientSample;
+        int stop = start + index.ambientSampleCount;
+        
+        for (int i=start; i<stop; i++) {
+            const BSP::DLeafAmbientLighting& sample = ambientLighting[i];
+            std::cout << "    Sample " << i - start << " @ ("
+                << static_cast<int>(sample.x) << ", "
+                << static_cast<int>(sample.y) << ", "
+                << static_cast<int>(sample.z) << "): " << std::endl;
+            
+            std::vector<std::string> dirLabels {
+                "+X", "-X",
+                "+Y", "-Y",
+                "+Z", "-Z",
+            };
+            
+            for (int dir=0; dir<6; dir++) {
+                std::cout << "        " << dirLabels[dir] << ": ("
+                    << static_cast<int>(sample.cube.color[dir].r) << ", "
+                    << static_cast<int>(sample.cube.color[dir].g) << ", "
+                    << static_cast<int>(sample.cube.color[dir].b) << ") * 2^"
+                    << static_cast<int>(sample.cube.color[dir].exp)
+                    << std::endl;
+            }
+        }
+        
+        leafIndex++;
+    }
+    
     // int i = 0;
     // for (BSP::Face& face : pBSP->get_faces()) {
         // std::cout << "Face " << i << ":" << std::endl;
@@ -217,73 +255,73 @@ int main(int argc, char** argv) {
         // i++;
     // }
     
-    int i = 0;
-    for (const BSP::Light& light : pBSP->get_lights()) {
-        std::cout << "Light " << i << ":" << std::endl;
+    // int i = 0;
+    // for (const BSP::Light& light : pBSP->get_lights()) {
+        // std::cout << "Light " << i << ":" << std::endl;
         
-        const BSP::Vec3<float>& pos = light.get_coords();
-        std::cout << "    pos: ("
-            << pos.x << ", "
-            << pos.y << ", "
-            << pos.z << ")" << std::endl;
+        // const BSP::Vec3<float>& pos = light.get_coords();
+        // std::cout << "    pos: ("
+            // << pos.x << ", "
+            // << pos.y << ", "
+            // << pos.z << ")" << std::endl;
             
-        std::cout << "    r: " << light.r << std::endl;
-        std::cout << "    g: " << light.g << std::endl;
-        std::cout << "    b: " << light.b << std::endl;
+        // std::cout << "    r: " << light.r << std::endl;
+        // std::cout << "    g: " << light.g << std::endl;
+        // std::cout << "    b: " << light.b << std::endl;
         
-        std::cout << "    Direction: <"
-            << light.direction.x << ", "
-            << light.direction.y << ", "
-            << light.direction.z << ">" << std::endl;
+        // std::cout << "    Direction: <"
+            // << light.direction.x << ", "
+            // << light.direction.y << ", "
+            // << light.direction.z << ">" << std::endl;
         
-        std::cout << "    Outer Cone: " << light.outerCone << std::endl;
-        std::cout << "    Inner Cone: " << light.innerCone << std::endl;
+        // std::cout << "    Outer Cone: " << light.outerCone << std::endl;
+        // std::cout << "    Inner Cone: " << light.innerCone << std::endl;
         
-        i++;
-    }
+        // i++;
+    // }
     
-    // std::cout << "Ent Data: " << std::endl;
-    // std::cout << pBSP->get_entdata() << std::endl;
+    // // std::cout << "Ent Data: " << std::endl;
+    // // std::cout << pBSP->get_entdata() << std::endl;
     
-    pBSP->build_worldlights();
+    // pBSP->build_worldlights();
     
-    std::cout << "World Lights: " << std::endl;
+    // std::cout << "World Lights: " << std::endl;
     
-    i = 0;
-    for (const BSP::DWorldLight& worldLight : pBSP->get_worldlights()) {
-        std::cout << "    World Light " << i << ":" << std::endl;
+    // i = 0;
+    // for (const BSP::DWorldLight& worldLight : pBSP->get_worldlights()) {
+        // std::cout << "    World Light " << i << ":" << std::endl;
         
-        std::cout << "        origin: ("
-            << worldLight.origin.x << ", "
-            << worldLight.origin.y << ", "
-            << worldLight.origin.z << ")" << std::endl;
+        // std::cout << "        origin: ("
+            // << worldLight.origin.x << ", "
+            // << worldLight.origin.y << ", "
+            // << worldLight.origin.z << ")" << std::endl;
             
-        std::cout << "        intensity: ("
-            << worldLight.intensity.x << ", "
-            << worldLight.intensity.y << ", "
-            << worldLight.intensity.z << ")" << std::endl;
+        // std::cout << "        intensity: ("
+            // << worldLight.intensity.x << ", "
+            // << worldLight.intensity.y << ", "
+            // << worldLight.intensity.z << ")" << std::endl;
             
-        std::cout << "        normal: <"
-            << worldLight.normal.x << ", "
-            << worldLight.normal.y << ", "
-            << worldLight.normal.z << ">" << std::endl;
+        // std::cout << "        normal: <"
+            // << worldLight.normal.x << ", "
+            // << worldLight.normal.y << ", "
+            // << worldLight.normal.z << ">" << std::endl;
             
-        std::cout << "        cluster: " << worldLight.cluster << std::endl;
-        std::cout << "        type: " << worldLight.type << std::endl;
-        std::cout << "        style: " << worldLight.style << std::endl;
-        std::cout << "        stopdot: " << worldLight.stopdot << std::endl;
-        std::cout << "        stopdot2: " << worldLight.stopdot2 << std::endl;
-        std::cout << "        exponent: " << worldLight.exponent << std::endl;
-        std::cout << "        radius: " << worldLight.radius << std::endl;
-        std::cout << "        const: " << worldLight.constantAtten << std::endl;
-        std::cout << "        lin: " << worldLight.linearAtten << std::endl;
-        std::cout << "        quad: " << worldLight.quadraticAtten << std::endl;
-        std::cout << "        flags: " << worldLight.flags << std::endl;
-        std::cout << "        texinfo: " << worldLight.texinfo << std::endl;
-        std::cout << "        owner: " << worldLight.owner << std::endl;
+        // std::cout << "        cluster: " << worldLight.cluster << std::endl;
+        // std::cout << "        type: " << worldLight.type << std::endl;
+        // std::cout << "        style: " << worldLight.style << std::endl;
+        // std::cout << "        stopdot: " << worldLight.stopdot << std::endl;
+        // std::cout << "        stopdot2: " << worldLight.stopdot2 << std::endl;
+        // std::cout << "        exponent: " << worldLight.exponent << std::endl;
+        // std::cout << "        radius: " << worldLight.radius << std::endl;
+        // std::cout << "        const: " << worldLight.constantAtten << std::endl;
+        // std::cout << "        lin: " << worldLight.linearAtten << std::endl;
+        // std::cout << "        quad: " << worldLight.quadraticAtten << std::endl;
+        // std::cout << "        flags: " << worldLight.flags << std::endl;
+        // std::cout << "        texinfo: " << worldLight.texinfo << std::endl;
+        // std::cout << "        owner: " << worldLight.owner << std::endl;
         
-        i++;
-    }
+        // i++;
+    // }
     
     // std::cout << "Entities:" << std::endl;
     // std::cout << pBSP->get_entdata() << std::endl;

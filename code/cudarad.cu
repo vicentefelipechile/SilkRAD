@@ -43,7 +43,7 @@ namespace CUDARAD {
             lightmapHeight(face.lightmapTextureSizeInLuxels[1] + 1),
             lightmapSize(lightmapWidth * lightmapHeight),
             lightmapStartIndex(face.lightOffset / sizeof(BSP::RGBExp32)),
-            totalLight(make_float3(0.0, 0.0, 0.0)) {}
+            totalLight(make_float3()) {}
 
     __device__ float3 FaceInfo::xyz_from_st(float s, float t) {
         float sOffset = this->texInfo.lightmapVecs[0][3];
@@ -81,13 +81,13 @@ namespace DirectLighting {
     __device__ float3 sample_at(
             CUDABSP::CUDABSP& cudaBSP,
             float3 samplePos,
-            float3 sampleNormal=make_float3(0.0, 0.0, 0.0)
+            float3 sampleNormal=make_float3()
             ) {
 
         uint8_t* pvs = CUDABSP::pvs_for_pos(cudaBSP, samplePos);
         size_t numClusters = cudaBSP.numVisClusters;
 
-        float3 result = make_float3(0.0, 0.0, 0.0);
+        float3 result = make_float3();
 
         for (size_t lightIndex=0;
                  lightIndex<cudaBSP.numWorldLights;
@@ -101,34 +101,24 @@ namespace DirectLighting {
                 continue;
             }
 
-            float3 lightPos = make_float3(
-                light.origin.x,
-                light.origin.y,
-                light.origin.z
-            );
-
+            float3 lightPos = make_float3(light.origin);
             float3 diff = samplePos - lightPos;
 
             /*
              * This light is on the wrong side of the current sample.
              * There's no way it could possibly light it.
              */
-            if (len(sampleNormal) > 0.0 && dot(diff, sampleNormal) >= 0.0) {
+            if (len(sampleNormal) > 0.0f && dot(diff, sampleNormal) >= 0.0f) {
                 continue;
             }
 
             float dist = len(diff);
             float3 dir = diff / dist;
 
-            float penumbraScale = 1.0;
+            float penumbraScale = 1.0f;
 
             if (light.type == BSP::EMIT_SPOTLIGHT) {
-                float3 lightNorm = make_float3(
-                    light.normal.x,
-                    light.normal.y,
-                    light.normal.z
-                );
-
+                float3 lightNorm = make_float3(light.normal);
                 float lightDot = dot(dir, lightNorm);
 
                 if (lightDot < light.stopdot2) {
@@ -161,7 +151,7 @@ namespace DirectLighting {
                 //}
             }
 
-            const float EPSILON = 1e-3;
+            const float EPSILON = 1e-3f;
 
             // Nudge the sample position towards the light slightly, to avoid
             // colliding with triangles that directly contain the sample
@@ -181,13 +171,8 @@ namespace DirectLighting {
             /* I CAN SEE THE LIGHT */
             float attenuation = attenuate(light, dist);
 
-            float3 lightContribution = make_float3(
-                light.intensity.x,  // r
-                light.intensity.y,  // g
-                light.intensity.z   // b
-            );
-
-            lightContribution *= penumbraScale * 255.0 / attenuation;
+            float3 lightContribution = make_float3(light.intensity);
+            lightContribution *= penumbraScale * 255.0f / attenuation;
 
             result += lightContribution;
         }
@@ -308,7 +293,7 @@ namespace DirectLighting {
 
 
 namespace AA {
-    static __device__ const float INV_GAMMA = 1.0 / 2.2;
+    static __device__ const float INV_GAMMA = 1.0f / 2.2f;
 
     static __device__ inline float perceptual_from_linear(float linear) {
         return powf(linear, INV_GAMMA);
@@ -317,8 +302,8 @@ namespace AA {
     static __device__ float intensity(float3 rgb) {
         return perceptual_from_linear(
             dot(
-                rgb / 255.0,
-                make_float3(1.0, 1.0, 1.0)
+                rgb / 255.0f,
+                make_float3(1.0f)
                 //make_float3(0.299, 0.587, 0.114)
             )
         );
@@ -445,11 +430,7 @@ namespace AA {
 
         prefix_sum<
             uint32_t, CUDABSP::MAX_LUXELS_PER_FACE,
-            MAP_FACES_AA_BLOCK_WIDTH, MAP_FACES_AA_BLOCK_HEIGHT,
-            const_div_ceil(
-                CUDABSP::MAX_LUXELS_PER_FACE,
-                MAP_FACES_AA_NUM_THREADS
-            )
+            MAP_FACES_AA_BLOCK_WIDTH, MAP_FACES_AA_BLOCK_HEIGHT
         >(aaTargets, scannedAATargets);
 
         __syncthreads();
@@ -489,7 +470,7 @@ namespace AA {
                 continue;
             }
 
-            finalSamples[index] = make_float3(0.0f, 0.0f, 0.0f);
+            finalSamples[index] = make_float3();
         }
 
         __syncthreads();
@@ -518,11 +499,11 @@ namespace AA {
             size_t sOffsetIndex = targetSupersampleNumber % SUPERSAMPLE_WIDTH;
             size_t tOffsetIndex = targetSupersampleNumber / SUPERSAMPLE_WIDTH;
 
-            float sStep = 2.0 / static_cast<float>(SUPERSAMPLE_WIDTH);
-            float tStep = 2.0 / static_cast<float>(SUPERSAMPLE_WIDTH);
+            float sStep = 2.0f / static_cast<float>(SUPERSAMPLE_WIDTH);
+            float tStep = 2.0f / static_cast<float>(SUPERSAMPLE_WIDTH);
 
-            float sOffset = sStep * sOffsetIndex - 1.0;
-            float tOffset = tStep * tOffsetIndex - 1.0;
+            float sOffset = sStep * sOffsetIndex - 1.0f;
+            float tOffset = tStep * tOffsetIndex - 1.0f;
 
             float3 color = DirectLighting::sample_at(
                 *pCudaBSP, faceInfo,
@@ -568,8 +549,8 @@ namespace AA {
 
 
 namespace BouncedLighting {
-    static __device__ const float PI = 3.14159265358979323846264;
-    static __device__ const float INV_PI = 0.31830988618379067153715;
+    static __device__ const float PI = 3.14159265358979323846264f;
+    static __device__ const float INV_PI = 0.31830988618379067153715f;
 
     /**
      * Computes the form factor from a differential patch to a convex
@@ -588,7 +569,7 @@ namespace BouncedLighting {
             float3* vertices, size_t numVertices
             ) {
 
-        float result = 0.0;
+        float result = 0.0f;
 
         for (size_t i=0; i<4; i++) {
             float3 vertex1 = vertices[i] - diffPos;
@@ -606,7 +587,7 @@ namespace BouncedLighting {
             result += dot(diffNorm, vertexCross) * theta;
         }
 
-        result *= 0.5 * INV_PI;
+        result *= 0.5f * INV_PI;
 
         return result;
     }
@@ -619,7 +600,7 @@ namespace BouncedLighting {
             ) {
 
         float3 delta = diff2Pos - diff1Pos;
-        float invDist = 1.0 / len(delta);
+        float invDist = 1.0f / len(delta);
 
         float3 dir = delta * invDist;
 
@@ -632,7 +613,7 @@ namespace BouncedLighting {
 
 
 namespace AmbientLighting {
-    static __device__ const float AMBIENT_SCALE = 0.0078125;    // 1/128
+    static __device__ const float AMBIENT_SCALE = 1.0f / 128.0f;
 
     __global__ void map_leaves(CUDABSP::CUDABSP* pCudaBSP) {
         size_t leafIndex = blockIdx.x;
@@ -674,9 +655,9 @@ namespace AmbientLighting {
             float3 leafSize = leafMaxs - leafMins;
 
             float3 samplePos = leafMins + make_float3(
-                leafSize.x * static_cast<float>(sample.x) / 255.0,
-                leafSize.y * static_cast<float>(sample.y) / 255.0,
-                leafSize.z * static_cast<float>(sample.z) / 255.0
+                leafSize.x * static_cast<float>(sample.x) / 255.0f,
+                leafSize.y * static_cast<float>(sample.y) / 255.0f,
+                leafSize.z * static_cast<float>(sample.z) / 255.0f
             );
 
             //sample.cube.color[0] = BSP::RGBExp32 {1, 1, 1, -3};
@@ -686,12 +667,20 @@ namespace AmbientLighting {
             //sample.cube.color[4] = BSP::RGBExp32 {1, 1, 1, -3};
             //sample.cube.color[5] = BSP::RGBExp32 {1, 1, 1, -3};
 
+            /*
+             * Note: This isn't really the correct way to do ambient lighting.
+             * Actual ambient lighting would sample lightmaps visible from this
+             * point in a sphere, and use that information to accumulate
+             * lighting data into a light cube.
+             * TODO: Write an actual ambient lighting algorithm.
+             */
+
             // +X
             sample.cube.color[0] = CUDABSP::rgbexp32_from_float3(
                 DirectLighting::sample_at(
                     *pCudaBSP,
                     samplePos,
-                    make_float3(1.0, 0.0, 0.0)
+                    make_float3(1.0f, 0.0f, 0.0f)
                 ) * AMBIENT_SCALE
             );
 
@@ -700,7 +689,7 @@ namespace AmbientLighting {
                 DirectLighting::sample_at(
                     *pCudaBSP,
                     samplePos,
-                    make_float3(-1.0, 0.0, 0.0)
+                    make_float3(-1.0f, 0.0f, 0.0f)
                 ) * AMBIENT_SCALE
             );
 
@@ -709,7 +698,7 @@ namespace AmbientLighting {
                 DirectLighting::sample_at(
                     *pCudaBSP,
                     samplePos,
-                    make_float3(0.0, 1.0, 0.0)
+                    make_float3(0.0f, 1.0f, 0.0f)
                 ) * AMBIENT_SCALE
             );
 
@@ -718,7 +707,7 @@ namespace AmbientLighting {
                 DirectLighting::sample_at(
                     *pCudaBSP,
                     samplePos,
-                    make_float3(0.0, -1.0, 0.0)
+                    make_float3(0.0f, -1.0f, 0.0f)
                 ) * AMBIENT_SCALE
             );
 
@@ -727,7 +716,7 @@ namespace AmbientLighting {
                 DirectLighting::sample_at(
                     *pCudaBSP,
                     samplePos,
-                    make_float3(0.0, 0.0, 1.0)
+                    make_float3(0.0f, 0.0f, 1.0f)
                 ) * AMBIENT_SCALE
             );
 
@@ -736,7 +725,7 @@ namespace AmbientLighting {
                 DirectLighting::sample_at(
                     *pCudaBSP,
                     samplePos,
-                    make_float3(0.0, 0.0, -1.0)
+                    make_float3(0.0f, 0.0f, -1.0f)
                 ) * AMBIENT_SCALE
             );
         }
@@ -781,9 +770,9 @@ namespace CUDARAD {
 
                 RayTracer::Triangle tri {
                     {
-                        make_float3(vertex1.x, vertex1.y, vertex1.z),
-                        make_float3(vertex2.x, vertex2.y, vertex2.z),
-                        make_float3(vertex3.x, vertex3.y, vertex3.z),
+                        make_float3(vertex1),
+                        make_float3(vertex2),
+                        make_float3(vertex3),
                     },
                 };
 
