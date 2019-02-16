@@ -12,6 +12,8 @@
 #include "cuda_runtime.h"
 #include "device_launch_parameters.h"
 
+#include "bsp.h"
+
 
 inline void cuda_assert(
         cudaError_t code, const char* file, int line,
