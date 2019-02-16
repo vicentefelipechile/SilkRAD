@@ -386,3 +386,5 @@ MigrationBackup/
 # Output BSPs
 **/out.bsp
 
+# Portal files
+*.prt
