@@ -14,14 +14,14 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
-    - name: configure
-      run: ./configure
+    # - name: configure
+    #   run: ./configure
 
     - name: Install dependencies
-      run: make
+      run: ${{github.workspace}}/code/make
 
     - name: Run check
-      run: make check
+      run: ${{github.workspace}}/code/make check
 
     - name: Run distcheck
-      run: make distcheck
+      run: ${{github.workspace}}/code/make distcheck
